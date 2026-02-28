@@ -3,9 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
 
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -22,34 +21,55 @@ func main() {
 
 	// 2. Defer close
 	defer conn.Close()
-	fmt.Println("Connection to RabbitMQ was successful!")
 
-	//3. Create a new channel
-	ch, err := conn.Channel()
-	if err != nil {
-		log.Fatalf("Could not open channel: %v", err)
-	}
-	defer ch.Close()
-
-	// 3.1 Publish a pause message
-	// This should be in main() after the channel is opened
-	err = pubsub.PublishJSON(
-		ch,
-		routing.ExchangePerilDirect,
-		routing.PauseKey,
-		routing.PlayingState{
-			IsPaused: true,
-		},
+	_, _, err = pubsub.DeclareAndBind(
+		conn,
+		routing.ExchangePerilTopic,
+		"game_logs",
+		routing.GameLogSlug+".*",
+		pubsub.QueueTypeDurable,
 	)
 	if err != nil {
-		log.Fatalf("could not publish JSON: %v", err)
+		log.Fatalf("could not subscribe to game logs: %v", err)
 	}
-	fmt.Println("Pause message published!")
+	fmt.Println("Server subsribed to game logs!")
 
-	// 4. Wait for a signal (Ctrl+C)
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
+	// 1. Show the admin what commands are available
+	gamelogic.PrintServerHelp()
 
-	<-signalChan
-	fmt.Println("Shutting down...")
+	for {
+		// 2. Wait for user to type something (e.g., "pause")
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+
+		// 3. Handle the commands
+		switch words[0] {
+		case "pause":
+			fmt.Println("Sending pause message...")
+			err = pubsub.PublishJSON(
+				conn, // Pass the connection, the PublishJSON helper handles the channel
+				routing.ExchangePerilDirect,
+				routing.PauseKey,
+				routing.PlayingState{IsPaused: true},
+			)
+		case "resume":
+			fmt.Println("Sending resume message...")
+			err = pubsub.PublishJSON(
+				conn,
+				routing.ExchangePerilDirect,
+				routing.PauseKey,
+				routing.PlayingState{IsPaused: false},
+			)
+		case "quit":
+			fmt.Println("Exiting...")
+			return // Breaking the loop and closing the server
+		default:
+			fmt.Println("Unkown command")
+		}
+		if err != nil {
+			log.Printf("Error publishing: %v", err)
+		}
+	}
 }
