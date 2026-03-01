@@ -34,25 +34,23 @@ func PublishJSON[T any](
 	)
 }
 
-type SimpleQueueType int
-
-const (
-	QueueTypeDurable SimpleQueueType = iota
-	QueueTypeTransient
-)
-
 func DeclareAndBind(
 	conn *amqp.Connection,
 	exchange,
 	queueName,
 	key string,
-	queueType SimpleQueueType, // This is the enum type that was made to rep "durable" or "transient"
+	simpleQueueType SimpleQueueType, // This is the enum type that was made to rep "durable" or "transient"
 ) (*amqp.Channel, amqp.Queue, error) {
 	// 1. Create the channel
 	ch, err := conn.Channel()
 	if err != nil {
 		return nil, amqp.Queue{}, err
 	}
+
+	isDurable := simpleQueueType == SimpleQueueDurable      // durable
+	isAutoDelete := simpleQueueType == SimpleQueueTransient // auto-delete
+	isExclusive := simpleQueueType == SimpleQueueTransient
+
 	// creating table for args to be passed in
 	args := amqp.Table{
 		"x-dead-letter-exchange": "peril_dlx",
@@ -60,11 +58,11 @@ func DeclareAndBind(
 
 	queue, err := ch.QueueDeclare(
 		queueName,
-		queueType == QueueTypeDurable,   // durable
-		queueType == QueueTypeTransient, // auto-delete
-		queueType == QueueTypeTransient, // exclusive
-		false,                           // noWait
-		args,                            // args
+		isDurable,    // durable
+		isAutoDelete, // auto-delete
+		isExclusive,  // exclusive
+		false,        // noWait
+		args,         // args
 	)
 	if err != nil {
 		return nil, amqp.Queue{}, err

@@ -9,6 +9,13 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+type SimpleQueueType int
+
+const (
+	SimpleQueueDurable SimpleQueueType = iota
+	SimpleQueueTransient
+)
+
 type AckType int
 
 const (

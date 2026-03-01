@@ -1,4 +1,4 @@
-module github.com/bootdotdev/learn-pub-sub-starter
+module github.com/JerryG0311/Vidify
 
 go 1.22.1
 
