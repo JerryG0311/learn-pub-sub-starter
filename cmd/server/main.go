@@ -22,17 +22,31 @@ func main() {
 	// 2. Defer close
 	defer conn.Close()
 
-	_, _, err = pubsub.DeclareAndBind(
+	publishCh, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("Could not open channel: %v", err)
+	}
+
+	err = pubsub.SubscribeGob(
 		conn,
 		routing.ExchangePerilTopic,
 		"game_logs",
 		routing.GameLogSlug+".*",
 		pubsub.QueueTypeDurable,
+		func(gl routing.GameLog) pubsub.AckType {
+			defer fmt.Print("> ")
+			err := gamelogic.WriteLog(gl)
+			if err != nil {
+				fmt.Printf("error writing log: %v/n", err)
+				return pubsub.NackRequeue
+			}
+			return pubsub.Ack
+		},
 	)
 	if err != nil {
 		log.Fatalf("could not subscribe to game logs: %v", err)
 	}
-	fmt.Println("Server subsribed to game logs!")
+	fmt.Println("Server subscribed to game logs and listening...")
 
 	// 1. Show the admin what commands are available
 	gamelogic.PrintServerHelp()
@@ -49,7 +63,7 @@ func main() {
 		case "pause":
 			fmt.Println("Sending pause message...")
 			err = pubsub.PublishJSON(
-				conn, // Pass the connection, the PublishJSON helper handles the channel
+				publishCh,
 				routing.ExchangePerilDirect,
 				routing.PauseKey,
 				routing.PlayingState{IsPaused: true},
@@ -57,7 +71,7 @@ func main() {
 		case "resume":
 			fmt.Println("Sending resume message...")
 			err = pubsub.PublishJSON(
-				conn,
+				publishCh,
 				routing.ExchangePerilDirect,
 				routing.PauseKey,
 				routing.PlayingState{IsPaused: false},

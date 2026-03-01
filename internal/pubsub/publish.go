@@ -1,36 +1,30 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 func PublishJSON[T any](
-	conn *amqp.Connection,
+	ch *amqp.Channel,
 	exchange,
-	key string,
+	routingKey string,
 	val T,
 ) error {
-	// 1. Open a channel from the connection
-	ch, err := conn.Channel()
-	if err != nil {
-		return err
-	}
-	defer ch.Close()
-
 	// Marshal the value to JSON
 	data, err := json.Marshal(val)
 	if err != nil {
 		return err
 	}
-
 	// Publish to the exchange with the routing key
 	return ch.PublishWithContext(
 		context.Background(),
 		exchange,
-		key,
+		routingKey,
 		false, // mandatory
 		false, // immediate
 		amqp.Publishing{
@@ -59,19 +53,18 @@ func DeclareAndBind(
 	if err != nil {
 		return nil, amqp.Queue{}, err
 	}
-
-	// 2. Set properties based on type
-	durable := queueType == QueueTypeDurable
-	autoDelete := queueType == QueueTypeTransient
-	exclusive := queueType == QueueTypeTransient
+	// creating table for args to be passed in
+	args := amqp.Table{
+		"x-dead-letter-exchange": "peril_dlx",
+	}
 
 	queue, err := ch.QueueDeclare(
 		queueName,
-		durable,
-		autoDelete,
-		exclusive,
-		false, // noWait param
-		nil,   // args param
+		queueType == QueueTypeDurable,   // durable
+		queueType == QueueTypeTransient, // auto-delete
+		queueType == QueueTypeTransient, // exclusive
+		false,                           // noWait
+		args,                            // args
 	)
 	if err != nil {
 		return nil, amqp.Queue{}, err
@@ -84,4 +77,30 @@ func DeclareAndBind(
 	}
 
 	return ch, queue, nil
+}
+
+func PublishGob[T any](
+	ch *amqp.Channel,
+	exchange,
+	routingKey string,
+	val T,
+) error {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(val)
+	if err != nil {
+		return err
+	}
+
+	return ch.PublishWithContext(
+		context.Background(),
+		exchange,
+		routingKey,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "application/gob",
+			Body:        buf.Bytes(),
+		},
+	)
 }
