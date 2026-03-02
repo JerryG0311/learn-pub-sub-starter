@@ -1,16 +1,28 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os/exec"
 
 	"github.com/JerryG0311/Vidify/internal/pubsub"
 	"github.com/JerryG0311/Vidify/internal/routing"
+	_ "github.com/mattn/go-sqlite3"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+var db *sql.DB
+
 func main() {
+	// SETTING UP DATABASE CONNECTION
+	var err error
+	db, err = sql.Open("sqlite3", "vidify.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
 	connString := "amqp://guest:guest@localhost:5672/"
 	conn, err := amqp.Dial(connString)
 	if err != nil {
@@ -57,25 +69,35 @@ func main() {
 
 func handlerVideoJob(job routing.VideoJob) pubsub.AckType {
 	fmt.Printf(" Worker received job %s. Starting transcode...\n", job.ID)
+	//-- UPDATED STATUS TO PROCESSING --
+	_, err := db.Exec("UPDATE videos SET status = ? WHERE id = ?", "PROCESSING", job.ID)
+	if err != nil {
+		log.Printf("DB Error (processing): %v", err)
+	}
+
+	thumbFile := fmt.Sprintf("data/%s_thumb.jpg", job.ID)
+	outputFile := fmt.Sprintf("data/%s_processed.%s", job.ID, job.TargetFormat)
 
 	// 1. Generate Instant Preview (Thumbnail)
 	// Grabs one frame from the 1-second mark
-	thumbFile := fmt.Sprintf("%s_thumb.jpg", job.ID)
+
 	thumbCmd := exec.Command("ffmpeg", "-i", job.SourcePath, "-ss", "00:00:01.000", "-vframes", "1", thumbFile)
-	if err := thumbCmd.Run(); err == nil {
-		fmt.Printf("Instant Preview created: %s\n", thumbFile)
-	}
+	thumbCmd.Run()
 
 	// 2. MAIN TRANSCODE
 
 	// Later on I'll setup S3 and replace SourchePath with an S3 link
-	outputFile := fmt.Sprintf("%s_processed.%s", job.ID, job.TargetFormat)
-	cmd := exec.Command("ffmpeg", "-i", job.SourcePath, outputFile)
 
+	cmd := exec.Command("ffmpeg", "-i", job.SourcePath, outputFile)
 	if err := cmd.Run(); err != nil {
 		fmt.Printf("Main transcode failed for %s\n", job.ID)
+		db.Exec("UPDATE videos SET status = ? WHERE id = ?", "FAILED", job.ID)
 		return pubsub.NackDiscard
 	}
+
+	// -- UPDATE STATUS TO COMPLETED --
+
+	db.Exec("UPDATE videos SET status = ? WHERE id = ?", "COMPLETED", job.ID)
 
 	fmt.Printf("Transcoding complete! Save to: %s\n", outputFile)
 	return pubsub.Ack

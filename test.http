@@ -1,0 +1,18 @@
+### 1. Upload a Video
+# @name upload
+POST http://localhost:8080/upload
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="video"; filename="jonah_TWN_Cal_Chris.mp4"
+Content-Type: video/mp4
+
+< ./jonah_TWN_Cal_Chris.mp4
+--boundary--
+
+### 2. Check Status
+# Uses the ID from the response above if you have the "REST Client" variables setup,
+# otherwise just paste your ID manually below.
+@jobId = {{upload.response.body.id}}
+
+GET http://localhost:8080/status/{{jobId}}

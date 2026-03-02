@@ -70,7 +70,7 @@ func subscribe[T any](
 		return err
 	}
 
-	err = ch.Qos(10, 0, false)
+	err = ch.Qos(1, 0, false) // 1 video per worker
 	if err != nil {
 		return err
 	}
@@ -93,6 +93,7 @@ func subscribe[T any](
 			target, err := unmarshaller(msg.Body)
 			if err != nil {
 				fmt.Printf("Error unmarshalling message: %v\n", err)
+				msg.Nack(false, false)
 				continue
 			}
 
