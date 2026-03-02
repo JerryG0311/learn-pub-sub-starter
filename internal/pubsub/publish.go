@@ -53,7 +53,7 @@ func DeclareAndBind(
 
 	// creating table for args to be passed in
 	args := amqp.Table{
-		"x-dead-letter-exchange": "Video_dlx",
+		"x-dead-letter-exchange": "video_dlx",
 	}
 
 	queue, err := ch.QueueDeclare(

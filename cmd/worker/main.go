@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os/exec"
 
 	"github.com/JerryG0311/Vidify/internal/pubsub"
 	"github.com/JerryG0311/Vidify/internal/routing"
@@ -55,9 +56,27 @@ func main() {
 }
 
 func handlerVideoJob(job routing.VideoJob) pubsub.AckType {
-	fmt.Printf("🎥 Processing video %s for user %s...\n", job.ID, job.UserID)
-	fmt.Printf("   -> Transcoding %s to %s format\n", job.SourcePath, job.TargetFormat)
+	fmt.Printf(" Worker received job %s. Starting transcode...\n", job.ID)
 
-	fmt.Println("✅ Transcoding complete!")
+	// 1. Generate Instant Preview (Thumbnail)
+	// Grabs one frame from the 1-second mark
+	thumbFile := fmt.Sprintf("%s_thumb.jpg", job.ID)
+	thumbCmd := exec.Command("ffmpeg", "-i", job.SourcePath, "-ss", "00:00:01.000", "-vframes", "1", thumbFile)
+	if err := thumbCmd.Run(); err == nil {
+		fmt.Printf("Instant Preview created: %s\n", thumbFile)
+	}
+
+	// 2. MAIN TRANSCODE
+
+	// Later on I'll setup S3 and replace SourchePath with an S3 link
+	outputFile := fmt.Sprintf("%s_processed.%s", job.ID, job.TargetFormat)
+	cmd := exec.Command("ffmpeg", "-i", job.SourcePath, outputFile)
+
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("Main transcode failed for %s\n", job.ID)
+		return pubsub.NackDiscard
+	}
+
+	fmt.Printf("Transcoding complete! Save to: %s\n", outputFile)
 	return pubsub.Ack
 }

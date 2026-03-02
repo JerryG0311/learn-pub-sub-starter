@@ -70,8 +70,8 @@ func main() {
 
 	// 4. Simulate a video upload
 	job := routing.VideoJob{
-		ID:           "vid-001",
-		SourcePath:   "s3://raw-bucket/my_audio_vlog.mov",
+		ID:           "vid-123",
+		SourcePath:   "/Users/geraldgoldman/Projects/Vidify/jonah_TWN_Cal_Chris.mp4",
 		TargetFormat: "mp4",
 		UserID:       "jerry_g",
 		CreatedAt:    time.Now(),
