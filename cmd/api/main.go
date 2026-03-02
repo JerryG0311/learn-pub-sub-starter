@@ -44,6 +44,30 @@ func main() {
 		log.Fatalf("Failed to declare exchange: %v", err)
 	}
 
+	// 3.5a Declare Dead Letter Exchange
+	err = ch.ExchangeDeclare(
+		routing.ExchangeVideoDLX,
+		"fanout",
+		true,  // durable
+		false, // auto-deleted
+		false,
+		false,
+		nil,
+	)
+
+	// 3.5b Declare the "Failed Jobs" queue
+	_, err = ch.QueueDeclare(
+		routing.VideoDLQueue,
+		true,  // durable
+		false, // auto-delete
+		false, // exclusive
+		false,
+		nil,
+	)
+
+	// 3.5c Bind the Failed Queue to the DLX
+	err = ch.QueueBind(routing.VideoDLQueue, "", routing.ExchangeVideoDLX, false, nil)
+
 	// 4. Simulate a video upload
 	job := routing.VideoJob{
 		ID:           "vid-001",

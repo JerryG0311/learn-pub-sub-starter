@@ -14,4 +14,6 @@ const (
 	ExchangeVideoTopic = "video_topic"
 	VideoUploadKey     = "video.upload"
 	VideoQueue         = "video_processing"
+	ExchangeVideoDLX   = "video_dlx"
+	VideoDLQueue       = "video_processing_failed"
 )
