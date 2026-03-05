@@ -4,10 +4,13 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
+	"time"
 
 	"github.com/JerryG0311/Vidify/internal/pubsub"
 	"github.com/JerryG0311/Vidify/internal/routing"
+	"github.com/JerryG0311/Vidify/internal/storage"
 	_ "github.com/mattn/go-sqlite3"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -23,10 +26,27 @@ func main() {
 	}
 	defer db.Close()
 
-	connString := "amqp://guest:guest@localhost:5672/"
-	conn, err := amqp.Dial(connString)
+	connString := os.Getenv("RABBITMQ_URL")
+	if connString == "" {
+		connString = "amqp://guest:guest@localhost:5672/"
+	}
+
+	var conn *amqp.Connection
+
+	// RETRY LOOP: Try to connect 5 times with a 2-second pause between each
+	for i := 0; i < 5; i++ {
+		fmt.Printf("Connecting to RabbitMQ (attempt %d)... ", i+1)
+		conn, err = amqp.Dial(connString)
+		if err == nil {
+			fmt.Println("Connected!")
+			break
+		}
+		fmt.Printf("Failed: %v. Retrying in 2s...\n", err)
+		time.Sleep(2 * time.Second)
+	}
+
 	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+		log.Fatalf("Could not connect to RabbitMQ after retries: %v", err)
 	}
 	defer conn.Close()
 
@@ -34,6 +54,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to open a channel: %v", err)
 	}
+
+	defer ch.Close()
 
 	err = ch.ExchangeDeclare(
 		routing.ExchangeVideoTopic,
@@ -69,36 +91,55 @@ func main() {
 
 func handlerVideoJob(job routing.VideoJob) pubsub.AckType {
 	fmt.Printf(" Worker received job %s. Starting transcode...\n", job.ID)
-	//-- UPDATED STATUS TO PROCESSING --
-	_, err := db.Exec("UPDATE videos SET status = ? WHERE id = ?", "PROCESSING", job.ID)
-	if err != nil {
-		log.Printf("DB Error (processing): %v", err)
+
+	// 1. Prepare Local Paths ( Temporary storage inside the container)
+	inputLocal := fmt.Sprintf("/tmp/%s_input.mp4", job.ID)
+	thumbLocal := fmt.Sprintf("/tmp/%s_thumb.jpg", job.ID)
+	outputLocal := fmt.Sprintf("/tmp/%s_processed.mp4", job.ID)
+
+	// Clean up local files when done
+	defer os.Remove(inputLocal)
+	defer os.Remove(thumbLocal)
+	defer os.Remove(outputLocal)
+
+	// 2. Download from S3 to local
+	if err := storage.DownloadFromS3(job.SourcePath, inputLocal); err != nil {
+		log.Printf("Download failed: %v", err)
+		time.Sleep(5 * time.Second) // pause for 5 seconds before retyring
+		return pubsub.NackRequeue
 	}
 
-	thumbFile := fmt.Sprintf("data/%s_thumb.jpg", job.ID)
-	outputFile := fmt.Sprintf("data/%s_processed.%s", job.ID, job.TargetFormat)
+	db.Exec("UPDATE videos SET status = ? WHERE ID = ?", "PROCESSING", job.ID)
 
-	// 1. Generate Instant Preview (Thumbnail)
-	// Grabs one frame from the 1-second mark
+	// 3. Generate Thumbnail
+	err := exec.Command("ffmpeg", "-i", inputLocal, "-ss", "00:00:01.000", "-vframes", "1", thumbLocal).Run()
+	if err != nil {
+		log.Printf("Thumbnail generation failed: %v", err)
+	}
 
-	thumbCmd := exec.Command("ffmpeg", "-i", job.SourcePath, "-ss", "00:00:01.000", "-vframes", "1", thumbFile)
-	thumbCmd.Run()
-
-	// 2. MAIN TRANSCODE
-
-	// Later on I'll setup S3 and replace SourchePath with an S3 link
-
-	cmd := exec.Command("ffmpeg", "-i", job.SourcePath, outputFile)
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("Main transcode failed for %s\n", job.ID)
-		db.Exec("UPDATE videos SET status = ? WHERE id = ?", "FAILED", job.ID)
+	// 4. Main Transcode
+	if err := exec.Command("ffmpeg", "-y", "-i", inputLocal, outputLocal).Run(); err != nil {
+		log.Printf("Transcode failed: %v", err)
+		db.Exec("UPDATE videos SET status = ? WHERE ID = ?", "FAILED", job.ID)
 		return pubsub.NackDiscard
 	}
 
-	// -- UPDATE STATUS TO COMPLETED --
+	// 5. Upload Results Back to S3
+	fmt.Printf("Transcoding complete. Uploading results to S3...\n")
 
-	db.Exec("UPDATE videos SET status = ? WHERE id = ?", "COMPLETED", job.ID)
+	// Upload Processed Video
+	processedS3URL, _ := storage.UploadFileToS3(fmt.Sprintf("%s_processed.mp4", job.ID), outputLocal)
+	// Upload Thumbnail
+	thumbS3URL, _ := storage.UploadFileToS3(fmt.Sprintf("%s_thumb.jpg", job.ID), thumbLocal)
 
-	fmt.Printf("Transcoding complete! Save to: %s\n", outputFile)
+	// 6. Update Databse with the NEW S3 URLs
+	_, err = db.Exec(
+		"UPDATE videos SET status = ?, source_path = ?, thumbnail_url = ? WHERE ID = ?",
+		"COMPLETED", processedS3URL, thumbS3URL, job.ID,
+	)
+	if err != nil {
+		log.Printf("Final DB Update Error: %v", err)
+	}
+
 	return pubsub.Ack
 }

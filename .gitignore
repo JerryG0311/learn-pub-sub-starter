@@ -6,3 +6,4 @@ data/
 vidify-api
 vidify-worker
 .DS_Store
+.env

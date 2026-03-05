@@ -1,0 +1,40 @@
+services:
+  # 1. ADD THIS MISSING SECTION
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI port (check this at localhost:15672)
+
+  api:
+    build: .
+    command: ["./api"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/root/data
+      - ./vidify.db:/root/vidify.db
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+
+  worker:
+    build: .
+    command: ["./worker"]
+    volumes:
+      - ./data:/root/data
+      - ./vidify.db:/root/vidify.db
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      # 2. ADD THESE TO THE WORKER TOO (Required for S3 uploads)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}

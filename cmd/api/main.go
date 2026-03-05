@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -14,37 +13,59 @@ import (
 
 	"github.com/JerryG0311/Vidify/internal/pubsub"
 	"github.com/JerryG0311/Vidify/internal/routing"
+	"github.com/JerryG0311/Vidify/internal/storage"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 func main() {
 
+	var err error
 	// -- Database  --
 
 	db, err := sql.Open("sqlite3", "vidify.db")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to open database: %v", err)
 	}
 	defer db.Close()
 
-	statement, _ := db.Prepare(`CREATE TABLE IF NOT EXISTS videos (
+	query := `CREATE TABLE IF NOT EXISTS videos (
 		id TEXT PRIMARY KEY, 
 		user_id TEXT,
 		status TEXT,
 		source_path TEXT,
+		thumbnail_url TEXT,
 		title TEXT,
 		description TEXT,
 		created_at DATETIME
 	
-	)`)
-	statement.Exec()
+	)`
+	_, err = db.Exec(query)
+	if err != nil {
+		log.Fatalf("Failed to create table: %v", err)
+	}
 
 	// 1. Establishing connection
 
-	connString := "amqp://guest@localhost:5672/"
-	conn, err := amqp.Dial(connString)
+	connString := os.Getenv("RABBITMQ_URL")
+	if connString == "" {
+		connString = "amqp://guest@localhost:5672/"
+	}
+
+	var conn *amqp.Connection
+
+	for i := 0; i < 5; i++ {
+		fmt.Printf("Connecting to RabbitMQ (attempt %d)... ", i+1)
+		conn, err = amqp.Dial(connString)
+		if err == nil {
+			fmt.Println("Connected!")
+			break
+		}
+		fmt.Printf("Failed: %v. Retrying in 2s...\n", err)
+		time.Sleep(2 * time.Second)
+	}
+
 	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+		log.Fatalf("Could not connect to RabbitMQ after retries: %v", err)
 	}
 	defer conn.Close()
 
@@ -100,10 +121,14 @@ func main() {
 	// 1. Parse the file from the request ("video" is the key used in the curl command)
 
 	http.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+
 		if r.Method != http.MethodPost {
 			http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 			return
 		}
+
+		title := r.FormValue("title")
+		description := r.FormValue("description")
 
 		file, header, err := r.FormFile("video")
 		if err != nil {
@@ -112,29 +137,23 @@ func main() {
 		}
 		defer file.Close()
 
-		// 2. Creating the 'data' directory if it doesn't already exist
-		os.MkdirAll("data", os.ModePerm)
-
-		// 3. Saving the file locally
-		dstPath := filepath.Join("data", header.Filename)
-		dst, err := os.Create(dstPath)
-		if err != nil {
-			http.Error(w, "Failed to save file", http.StatusInternalServerError)
-			return
-		}
-		defer dst.Close()
-		io.Copy(dst, file)
-
-		title := r.FormValue("title")
-		descirption := r.FormValue("description")
 		if title == "" {
 			title = header.Filename
+		}
+
+		// Upload directly to S3 (No local 'data' folder needed)
+		log.Printf("Starting S3 upload for file: %s to bucket: %s", header.Filename, os.Getenv("S3_BUCKET_NAME"))
+		s3URL, err := storage.UploadToS3(header.Filename, file)
+		if err != nil {
+			log.Printf("S3 Upload Error: %v", err)
+			http.Error(w, "Failed to upload to cloud", http.StatusInternalServerError)
+			return
 		}
 
 		// 4. Creating the job
 		job := routing.VideoJob{
 			ID:           fmt.Sprintf("vid-%d", time.Now().Unix()),
-			SourcePath:   dstPath,
+			SourcePath:   s3URL, // Now pointing to S3
 			TargetFormat: "mp4",
 			UserID:       "jerry_g",
 			CreatedAt:    time.Now(),
@@ -142,7 +161,7 @@ func main() {
 
 		_, err = db.Exec(
 			"INSERT INTO videos (id, user_id, status, source_path, title, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			job.ID, job.UserID, "PENDING", job.SourcePath, title, descirption, job.CreatedAt,
+			job.ID, job.UserID, "PENDING", job.SourcePath, title, description, job.CreatedAt,
 		)
 
 		// 5. Publish to RabbitMQ
@@ -174,7 +193,7 @@ func main() {
 	http.Handle("/data/", http.StripPrefix("/data/", http.FileServer(http.Dir("./data"))))
 
 	http.HandleFunc("/gallery", func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query("SELECT id, status, title FROM videos ORDER BY created_at DESC")
+		rows, err := db.Query("SELECT id, status, title, source_path, thumbnail_url FROM videos ORDER BY created_at DESC")
 		if err != nil {
 			http.Error(w, "Failed to query videos", http.StatusInternalServerError)
 			return
@@ -211,10 +230,12 @@ func main() {
                 <tbody>`)
 
 		for rows.Next() {
-			var id, status, title string
-			rows.Scan(&id, &status, &title)
+			var id, status, title, SourcePath, thumbURL string
+			rows.Scan(&id, &status, &title, &SourcePath, &thumbURL)
 
-			thumbURL := fmt.Sprintf("/data/%s_thumb.jpg", id)
+			if thumbURL == "" {
+				thumbURL = fmt.Sprintf("/data/%s_thumb.jpg", id)
+			}
 			statusClass := "pending"
 			if status == "COMPLETED" {
 				statusClass = "completed"
@@ -222,7 +243,7 @@ func main() {
 
 			displayAction := "---"
 			if status == "COMPLETED" {
-				displayAction = fmt.Sprintf("<a class='btn' href='/data/%s_processed.mp4'>Watch</a>", id)
+				displayAction = fmt.Sprintf("<a class='btn' href='/view/%s'>Watch</a>", id)
 			}
 
 			deleteAction := fmt.Sprintf(`
@@ -245,6 +266,44 @@ func main() {
 		}
 
 		fmt.Fprint(w, "</tbody></table></body></html>")
+	})
+
+	http.HandleFunc("/view/", func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Path[len("/view/"):]
+		if id == "" {
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+		var title, s3URL string
+
+		// Get the S3 URL from the DB
+		err := db.QueryRow("SELECT title, source_path FROM videos WHERE id = ?", id).Scan(&title, &s3URL)
+		if err != nil {
+			log.Printf("View Error: %v", err)
+			http.Error(w, "Video not found", http.StatusNotFound)
+			return
+		}
+
+		// Vifeo Player Page
+		fmt.Fprintf(w, `
+		<html>
+		<head>
+			<title>Vidify - %s</title>
+			<style>
+				body { background: #111; color: white; font-family: sans-serif; text-align: center; padding: 50px; }
+				video { width: 80%%; max-width: 1000px; border: 3px solid #00adef; border-radius: 12px; }
+				.nav { margin-bottom: 20px; }
+				a { color: #00adef; text-decoration: none; font-weight: bold; }
+			</style>
+		</head>
+		<body>
+			<div class="nav"><a href="/gallery">← Back to Gallery</a></div>
+			<h1>%s</h1>
+			<video controls autoplay>
+				<source src="%s" type="video/mp4">
+			</video>
+		</body>
+		</html>`, title, title, s3URL)
 	})
 
 	http.HandleFunc("/delete/", func(w http.ResponseWriter, r *http.Request) {
