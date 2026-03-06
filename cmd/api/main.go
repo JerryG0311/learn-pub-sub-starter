@@ -200,72 +200,182 @@ func main() {
 		}
 		defer rows.Close()
 
-		// Professional Header & Styling
 		fmt.Fprint(w, `
-        <html>
-        <head>
-            <style>
-                body { font-family: sans-serif; margin: 40px; background: #f4f7f6; }
-                table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                th, td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
-                th { background: #00adef; color: white; }
-                img { border-radius: 4px; background: #ddd; object-fit: cover; }
-                .btn { text-decoration: none; background: #00adef; color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold; }
-                .status { font-weight: bold; text-transform: uppercase; font-size: 0.8em; padding: 4px 8px; border-radius: 12px; }
-                .completed { background: #e6fffa; color: #2c7a7b; }
-                .pending { background: #fffaf0; color: #9c4221; }
-            </style>
-        </head>
-        <body>
-            <h1>Vidify Library</h1>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Preview</th>
-                        <th>Title</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>`)
+			<html>
+			<head>
+				<style>
+					body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 40px; background: #f0f2f5; color: #1a1a1a; }
+					.header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+					
+					/* View Toggle Buttons */
+					.view-btn { background: #fff; border: 1px solid #ddd; padding: 8px 16px; cursor: pointer; border-radius: 6px; font-weight: bold; transition: 0.2s; }
+					.view-btn.active { background: #00adef; color: white; border-color: #00adef; }
+					
+					/* List View (Table) Styles */
+					table { width: 100%; border-collapse: separate; border-spacing: 0 10px; }
+					th { text-align: left; padding: 10px 15px; color: #666; font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; }
+					td { background: white; padding: 15px; border-top: 1px solid #eee; border-bottom: 1px solid #eee; vertical-align: middle; }
+					td:first-child { border-left: 1px solid #eee; border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+					td:last-child { border-right: 1px solid #eee; border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+
+					/* Fixed Thumbnail Size for List View */
+					img { 
+						width: 160px !important; 
+						height: 90px !important; 
+						border-radius: 6px; 
+						object-fit: cover; 
+						display: block;
+						background: #000;
+					}
+
+					/* Grid Layout Logic */
+					.grid-view #video-table, 
+					.grid-view thead, 
+					.grid-view tbody, 
+					.grid-view tr, 
+					.grid-view td { display: block; width: 100%; border: none; background: transparent; }
+					
+					.grid-view #video-table tbody { 
+						display: grid; 
+						grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+						gap: 25px; 
+					}
+
+					.grid-view tr { 
+						background: white; 
+						padding: 0; 
+						border-radius: 12px; 
+						overflow: hidden;
+						box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+						transition: transform 0.3s ease, box-shadow 0.3s ease; 
+					}
+					
+					.grid-view tr:hover { transform: translateY(-8px); box-shadow: 0 12px 20px rgba(0,0,0,0.1); }
+					
+					.grid-view td { padding: 15px; }
+					.grid-view td:first-child { padding: 0; border-radius: 0; } /* Thumbnail cell */
+
+					/* Let image expand in Grid View */
+					.grid-view img { 
+						width: 100% !important; 
+						height: auto !important; 
+						aspect-ratio: 16/9; 
+						border-radius: 0;
+					}
+
+					/* Buttons & Tags */
+					.btn { text-decoration: none; background: #00adef; color: white; padding: 8px 16px; border-radius: 6px; font-weight: bold; display: inline-block; margin-right: 5px; font-size: 0.9em; }
+					.status { font-weight: bold; text-transform: uppercase; font-size: 0.7em; padding: 4px 10px; border-radius: 20px; }
+					.completed { background: #e6fffa; color: #2c7a7b; }
+					.pending { background: #fffaf0; color: #9c4221; }
+				</style>
+			</head>
+			<body>
+						<div class="header-flex">
+							<h1>My Library</h1>
+							
+							<div style="flex-grow: 1; margin: 0 40px; max-width: 400px;">
+								<input type="text" id="searchInput" onkeyup="filterVideos()" 
+									placeholder="Search videos by title..." 
+									style="width: 100%; padding: 10px 15px; border-radius: 20px; border: 1px solid #ddd; outline: none; box-sizing: border-box;">
+							</div>
+
+							<div>
+								<button class="view-btn active" id="listBtn" onclick="toggleView('list')">List</button>
+								<button class="view-btn" id="gridBtn" onclick="toggleView('grid')">Grid</button>
+							</div>
+						</div>
+
+				<div id="wrapper">
+					<table id="video-table">
+						<thead>
+							<tr>
+								<th>Preview</th>
+								<th>Video Details</th>
+								<th>Status</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody>`)
 
 		for rows.Next() {
-			var id, status, title, SourcePath, thumbURL string
-			rows.Scan(&id, &status, &title, &SourcePath, &thumbURL)
+			var id, status, title, sourcePath, thumbURL string
+			rows.Scan(&id, &status, &title, &sourcePath, &thumbURL)
 
 			if thumbURL == "" {
-				thumbURL = fmt.Sprintf("/data/%s_thumb.jpg", id)
+				thumbURL = fmt.Sprintf("https://%s.s3.us-east-2.amazonaws.com/%s_thumb.jpg", os.Getenv("S3_BUCKET_NAME"), id)
 			}
+
 			statusClass := "pending"
 			if status == "COMPLETED" {
 				statusClass = "completed"
 			}
 
-			displayAction := "---"
+			actions := "---"
 			if status == "COMPLETED" {
-				displayAction = fmt.Sprintf("<a class='btn' href='/view/%s'>Watch</a>", id)
+				actions = fmt.Sprintf(`
+						<a class="btn" href="/view/%s">Watch</a>
+						<a class="btn" style="background:#2c7a7b;" href="%s" download>Save</a>`, id, sourcePath)
 			}
 
-			deleteAction := fmt.Sprintf(`
-				<form action="/delete/%s" method="POST" style="display:inline;" onsubmit="return confirm('Delete this video?');">
-					<button type="submit" style="background:#ff4d4d; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">Delete</button>
-				</form>`, id)
+			deleteBtn := fmt.Sprintf(`
+					<form action="/delete/%s" method="POST" style="display:inline;" onsubmit="return confirm('Delete permanently?');">
+						<button type="submit" style="background:none; color:#e53e3e; border:none; cursor:pointer; font-size:0.85em; font-weight:bold; margin-top:10px;">Delete</button>
+					</form>`, id)
 
-			// We use exactly 6 variables for the 6 %s placeholders below
 			fmt.Fprintf(w, `
-						<tr>
-				<td><img src="%s" width="160" height="90" onerror="this.src='https://via.placeholder.com/160x90?text=No+Preview'"></td>
-				<td>
-					<strong style="font-size: 1.2em;">%s</strong><br>
-					<a href="/edit/%s" style="font-size: 0.8em; color: #00adef; text-decoration: none;">Edit Title</a>
-				</td>
-				<td><span class="status %s">%s</span></td>
-				<td>%s %s</td> 
-			</tr>`,
-				thumbURL, title, id, statusClass, status, displayAction, deleteAction)
+					<tr>
+						<td><img src="%s" onerror="this.src='https://via.placeholder.com/160x90?text=Processing...'"></td>
+						<td>
+							<strong style="font-size: 1.1em; display:block; margin-bottom:5px;">%s</strong>
+							<a href="/edit/%s" style="color:#00adef; text-decoration:none; font-size:0.85em;">Edit Title</a>
+						</td>
+						<td><span class="status %s">%s</span></td>
+						<td>%s %s</td>
+					</tr>`, thumbURL, title, id, statusClass, status, actions, deleteBtn)
 		}
 
-		fmt.Fprint(w, "</tbody></table></body></html>")
+		fmt.Fprint(w, `
+						</tbody>
+					</table>
+				</div>
+
+				<script>
+					function toggleView(type) {
+						const wrapper = document.getElementById('wrapper');
+						const listBtn = document.getElementById('listBtn');
+						const gridBtn = document.getElementById('gridBtn');
+
+						if (type === 'grid') {
+							wrapper.classList.add('grid-view');
+							gridBtn.classList.add('active');
+							listBtn.classList.remove('active');
+						} else {
+							wrapper.classList.remove('grid-view');
+							listBtn.classList.add('active');
+							gridBtn.classList.remove('active');
+						}
+					}
+					function filterVideos() {
+                    const input = document.getElementById('searchInput');
+                    const filter = input.value.toLowerCase();
+                    const table = document.getElementById('video-table');
+                    const rows = table.getElementsByTagName('tr');  
+                    for (let i = 1; i < rows.length; i++) {
+                        const titleCell = rows[i].getElementsByTagName('td')[1];
+                        if (titleCell) {
+                            const titleText = titleCell.textContent || titleCell.innerText;
+                            if (titleText.toLowerCase().indexOf(filter) > -1) {
+                                rows[i].style.display = "";
+                            } else {
+                                rows[i].style.display = "none";
+                            }
+                        }
+                    }
+                }
+				</script>
+			</body>
+			</html>`)
 	})
 
 	http.HandleFunc("/view/", func(w http.ResponseWriter, r *http.Request) {
@@ -314,22 +424,15 @@ func main() {
 
 		id := filepath.Base(r.URL.Path)
 
+		storage.DeleteFromS3(id + "_processed.mp4")
+		storage.DeleteFromS3(id + "_thumb.jpg")
+
 		_, err := db.Exec("DELETE FROM videos WHERE id = ?", id)
 		if err != nil {
 			log.Printf("DB Delete Error: %v", err)
-			http.Error(w, "Failed to delete record", http.StatusInternalServerError)
-			return
 		}
 
-		filesToDelete := []string{
-			filepath.Join("data", id+"_processed.mp4"),
-			filepath.Join("data", id+"_thumb.jpg"),
-		}
-
-		for _, f := range filesToDelete {
-			os.Remove(f)
-		}
-
+		log.Printf("Successfully deleted video %s from S3 and DB", id)
 		http.Redirect(w, r, "/gallery", http.StatusSeeOther)
 	})
 

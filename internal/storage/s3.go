@@ -27,17 +27,18 @@ func UploadToS3(filename string, file io.Reader) (string, error) {
 
 	// 2. Upload the file
 	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(filename),
-		Body:   file,
-		ACL:    types.ObjectCannedACLPublicRead, // Make it viewable in gallery
+		Bucket:             aws.String(bucket),
+		Key:                aws.String(filename),
+		Body:               file,
+		ACL:                types.ObjectCannedACLPublicRead, // Make it viewable in gallery
+		ContentDisposition: aws.String("attachment; filename=\"" + filename + "\""),
 	})
 	if err != nil {
 		return "", err
 	}
 
 	// 3. Return the publick URL
-	return "http://" + bucket + ".s3." + region + ".amazonaws.com/" + filename, nil
+	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", bucket, region, filename), nil
 }
 
 func UploadFileToS3(filename string, localPath string) (string, error) {
@@ -68,5 +69,24 @@ func DownloadFromS3(url string, localPath string) error {
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+func DeleteFromS3(filename string) error {
+	bucket := os.Getenv("S3_BUCKET_NAME")
+	region := os.Getenv("AWS_REGION")
+
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	if err != nil {
+		return err
+	}
+
+	client := s3.NewFromConfig(cfg)
+
+	_, err = client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(filename),
+	})
+
 	return err
 }
