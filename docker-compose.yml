@@ -12,8 +12,8 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/root/data
-      - ./vidify.db:/root/vidify.db
+      - ./data:/app/data
+      - ./vidify.db:/app/vidify.db
     depends_on:
       - rabbitmq
     environment:
@@ -27,8 +27,8 @@ services:
     build: .
     command: ["./worker"]
     volumes:
-      - ./data:/root/data
-      - ./vidify.db:/root/vidify.db
+      - ./data:/app/data
+      - ./vidify.db:/app/vidify.db
     depends_on:
       - rabbitmq
     environment:

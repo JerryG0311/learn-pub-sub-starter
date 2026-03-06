@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vidify Library</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="header-flex">
+        <h1>My Library</h1>
+        <div class="search-container">
+            <input type="text" id="searchInput" onkeyup="filterVideos()" 
+                placeholder="Search videos by title..." class="search-bar">
+        </div>
+        <div class="toggle-container">
+            <button class="view-btn active" id="listBtn" onclick="toggleView('list')">List</button>
+            <button class="view-btn" id="gridBtn" onclick="toggleView('grid')">Grid</button>
+        </div>
+    </div>
+
+    <div id="wrapper">
+        <table id="video-table">
+            <thead>
+                <tr>
+                    <th>Preview</th>
+                    <th>Video Details</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Videos}}
+                <tr>
+                    <td>
+                        <img src="{{.ThumbnailURL}}" onerror="this.src='https://via.placeholder.com/160x90?text=Processing...'">
+                    </td>
+                    <td>
+                        <strong class="video-title-text">{{.Title}}</strong>
+                        <a href="/edit/{{.ID}}" class="edit-link">Edit Title</a>
+                    </td>
+                    <td>
+                        <span class="status {{if eq .Status "COMPLETED"}}completed{{else}}pending{{end}}">
+                            {{.Status}}
+                        </span>
+                    </td>
+                    <td>
+                        {{if eq .Status "COMPLETED"}}
+                        <a class="btn" href="/view/{{.ID}}">Watch</a>
+                        <button class="btn share-btn" onclick="openShareModal('{{.Title}}', 'http://localhost:8080/view/{{.ID}}')">Share</button>
+                        <a class="btn save-btn" href="{{.SourcePath}}" download>Save</a>
+                        {{else}}
+                        ---
+                        {{end}}
+                        <form action="/delete/{{.ID}}" method="POST" class="delete-form" onsubmit="return confirm('Delete permanently?');">
+                            <button type="submit" class="delete-btn-text">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+
+    <div id="shareModal" class="modal-overlay">
+        <div class="modal-content">
+            <button onclick="closeModal()" class="close-btn">&times;</button>
+            <h2 class="modal-header">🚀 Marketing & Share Tools</h2>
+            
+            <div class="modal-section">
+                <p class="section-label">Social Distribution</p>
+                <div class="social-grid">
+                    <a id="shareX" target="_blank" class="btn x-btn">X / Twitter</a>
+                    <a id="shareLI" target="_blank" class="btn li-btn">LinkedIn</a>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <p class="section-label">Marketing Assets</p>
+                <button class="btn embed-btn" onclick="copyEmbed()">Copy Embed Code (for Landing Pages)</button>
+                <button class="btn email-btn" onclick="copyEmailLink()">Copy Email Campaign Link</button>
+            </div>
+
+            <div class="modal-section">
+                <p class="section-label">Direct Asset URL</p>
+                <input type="text" id="shareUrlInput" readonly class="url-input">
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/gallery.js"></script>
+</body>
+</html>

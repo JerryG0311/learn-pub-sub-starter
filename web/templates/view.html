@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vidify - {{ .Title }}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        /* Specific Styles for the Watch Page */
+        body { margin: 0; padding: 0; background: #f9f9fb; }
+        .video-hero { background: #111; padding: 60px 0; display: flex; justify-content: center; align-items: center; }
+        video { width: 90%; max-width: 1100px; border-radius: 12px; box-shadow: 0 30px 60px rgba(0,0,0,0.5); border: 1px solid #333; }
+        .video-details { max-width: 1100px; margin: 40px auto; padding: 0 40px; }
+        .v-title { font-size: 2.5em; margin: 0 0 10px 0; font-weight: 700; }
+        .v-meta { color: #666; font-size: 0.9em; margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
+        .v-desc { font-size: 1.1em; line-height: 1.7; color: #444; max-width: 800px; }
+        .nav-header { padding: 15px 40px; background: white; border-bottom: 1px solid #eee; }
+        .marketing-cta { margin-top: 50px; background: #00adef; color: white; padding: 40px; border-radius: 15px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="nav-header">
+        <a href="/gallery" style="color: #00adef; text-decoration: none; font-weight: bold;">← Back to Library</a>
+    </div>
+
+    <div class="video-hero">
+        <video controls autoplay poster="{{ .ThumbnailURL }}">
+            <source src="{{ .SourcePath }}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+    </div>
+
+    <div class="video-details">
+        <h1 class="v-title">{{ .Title }}</h1>
+        <div class="v-meta">
+            <span>Published by JerryG</span> • <span>Cloud Optimized via S3</span>
+        </div>
+        
+        <div class="v-desc">
+            {{ .Description }}
+        </div>
+
+        <div class="marketing-cta">
+            <h2>Want to use this video in your next campaign?</h2>
+            <p>Our platform handles the hosting, so you can focus on the results.</p>
+            <a href="/gallery" style="background: white; color: #00adef; padding: 12px 25px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block; margin-top: 15px;">Return to Dashboard</a>
+        </div>
+    </div>
+</body>
+</html>
