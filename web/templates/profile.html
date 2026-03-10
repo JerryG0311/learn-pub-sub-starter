@@ -38,6 +38,16 @@
         .stacked-fields { display: grid; gap: 18px; }
         .helper-text { font-size: 12px; color: #777; margin-top: 8px; line-height: 1.4; }
 
+        .field-error {
+            font-size: 13px;
+            color: #ff6b6b;
+            margin-top: 8px;
+        }
+        .input-error {
+            border-color: #ff6b6b !important;
+            box-shadow: 0 0 0 3px rgba(255,107,107,0.15) !important;
+        }
+
         /* IDENTITY ROW (SMALL PFP & NAME) */
         .identity-container { display: flex; align-items: center; gap: 18px; margin-bottom: 36px; }
         .avatar-wrapper { position: relative; width: 80px !important; height: 80px !important; min-width: 80px; min-height: 80px; max-width: 80px; max-height: 80px; aspect-ratio: 1 / 1; border-radius: 50%; overflow: hidden; cursor: pointer; flex: 0 0 80px; box-sizing: border-box; background: transparent; }
@@ -139,7 +149,6 @@
         <div class="main-content">
             <h1 class="section-title">Profile details</h1>
             <p class="section-subtitle">Shape how your creator profile appears across Vidify. Start with your public identity, then add a short about section and external links.</p>
-
             <div class="identity-container">
                 <div class="avatar-wrapper" onclick="openFilePicker()">
                     {{if .ProfilePictureURL}}
@@ -171,8 +180,9 @@
 
                     <div class="form-group" style="margin-bottom: 0; max-width: 780px;">
                         <label for="username-input">Username</label>
-                        <input id="username-input" class="text-input" type="text" name="username" value="{{.Username}}" placeholder="@yourusername">
-                        <div class="helper-text">This is your public handle. Letters, numbers, periods, and underscores work best.</div>
+                        <input id="username-input" class="text-input{{if .UsernameError}} input-error{{end}}" type="text" name="username" value="{{.Username}}" placeholder="@yourusername" minlength="3" maxlength="30" autocapitalize="off" autocomplete="off" spellcheck="false">
+                        <div class="helper-text">This is your public handle. Use 3–30 characters with letters, numbers, periods, or underscores.</div>
+                        <div id="username-error" class="field-error" {{if not .UsernameError}}style="display:none;"{{end}}>{{.UsernameError}}</div>
                     </div>
 
                     <div class="form-group" style="margin-bottom: 0; max-width: 780px;">
@@ -271,6 +281,9 @@
         const usernamePreview = document.getElementById('usernamePreview');
         const displayNameInput = document.getElementById('display-name-input');
         const usernameInput = document.getElementById('username-input');
+        const profileForm = document.getElementById('profile-form');
+
+        const usernameError = document.getElementById('username-error');
 
         const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
         const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -359,6 +372,21 @@
             }
         }
 
+        function isUsernameInputValid(value) {
+            const normalized = value.trim().replace(/^@/, '');
+            return /^[a-z0-9._]{3,30}$/i.test(normalized);
+        }
+
+        function applyUsernameError(message) {
+            if (usernameError) {
+                usernameError.textContent = message;
+                usernameError.style.display = 'block';
+            }
+            if (usernameInput) {
+                usernameInput.classList.add('input-error');
+            }
+        }
+
         function getCropMetrics() {
             const areaWidth = cropArea.clientWidth;
             const areaHeight = cropArea.clientHeight;
@@ -428,9 +456,40 @@
             displayNameInput.addEventListener('input', syncIdentityPreview);
         }
         if (usernameInput) {
-            usernameInput.addEventListener('input', syncIdentityPreview);
+            usernameInput.addEventListener('input', function() {
+                syncIdentityPreview();
+                if (usernameError) {
+                    usernameError.style.display = 'none';
+                }
+                usernameInput.classList.remove('input-error');
+            });
         }
         syncIdentityPreview();
+
+        if (profileForm && usernameInput) {
+            profileForm.addEventListener('submit', function(event) {
+                if (!isUsernameInputValid(usernameInput.value)) {
+                    event.preventDefault();
+                    applyUsernameError('Username must be 3–30 characters and use only letters, numbers, periods, or underscores.');
+                    usernameInput.focus();
+                    return;
+                }
+
+                if (usernameError) {
+                    usernameError.style.display = 'none';
+                }
+
+                usernameInput.classList.remove('input-error');
+            });
+        }
+
+        const pageError = new URLSearchParams(window.location.search).get('error');
+        if (pageError === 'invalid_username') {
+            applyUsernameError('Username must be 3–30 characters and use only letters, numbers, periods, or underscores.');
+        } else if (pageError === 'username_taken') {
+            applyUsernameError('That username is already taken. Try another one.');
+        }
+        
         if (avatarTrigger) {
             avatarTrigger.onclick = openFilePicker;
         }

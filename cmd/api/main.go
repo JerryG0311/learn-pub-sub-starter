@@ -52,6 +52,7 @@ type ProfileData struct {
 	ProfilePictureURL string
 	TotalVideos       int
 	TotalViews        int
+	UsernameError     string
 }
 
 type GalleryPageData struct {
@@ -127,6 +128,39 @@ func normalizeDisplayName(value, fallbackEmail string) string {
 	return fallbackDisplayName
 }
 
+func isUsernameFormatValid(value string) bool {
+	trimmed := strings.TrimPrefix(strings.TrimSpace(strings.ToLower(value)), "@")
+	if len(trimmed) < 3 || len(trimmed) > 30 {
+		return false
+	}
+
+	for _, r := range trimmed {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func ensureUniqueUsername(db *sql.DB, username, currentEmail string) (string, error) {
+	base := strings.TrimPrefix(normalizeUsername(username, currentEmail), "@")
+	candidate := base
+
+	for i := 0; i < 500; i++ {
+		var count int
+		err := db.QueryRow("SELECT COUNT(1) FROM users WHERE username = ? AND email != ?", "@"+candidate, currentEmail).Scan(&count)
+		if err != nil {
+			return "", err
+		}
+		if count == 0 {
+			return "@" + candidate, nil
+		}
+		candidate = fmt.Sprintf("%s%d", base, i+1)
+	}
+	return "", fmt.Errorf("unable to generate a unique username")
+}
+
 func getLoggedInUser(r *http.Request) string {
 	cookie, err := r.Cookie("session_user")
 	if err != nil {
@@ -184,9 +218,15 @@ func main() {
 			email := r.FormValue("email")
 			pass := r.FormValue("password")
 			hashed, _ := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
-			displayName, username := deriveProfileIdentity(email)
+			displayName, rawUsername := deriveProfileIdentity(email)
 
-			_, err := db.Exec("INSERT INTO users (email, password, display_name, username) VALUES (?, ?, ?, ?)", email, string(hashed), displayName, username)
+			username, err := ensureUniqueUsername(db, rawUsername, email)
+			if err != nil {
+				log.Printf("Error generating unique username: %v", err)
+				http.Error(w, "unable to create account", http.StatusInternalServerError)
+				return
+			}
+			_, err = db.Exec("INSERT INTO users (email, password, display_name, username) VALUES (?, ?, ?, ?)", email, string(hashed), displayName, username)
 			if err != nil {
 				http.Error(w, "User already exists", http.StatusConflict)
 				return
@@ -242,6 +282,13 @@ func main() {
 
 		var data ProfileData
 		data.Email = userEmail
+
+		switch r.URL.Query().Get("error") {
+		case "invalid_username":
+			data.UsernameError = "Username must be 3-30 characters and use only letters, numbers, periods, or underscores."
+		case "username_take":
+			data.UsernameError = "That username is already taken. Try another one."
+		}
 
 		query := `
 			SELECT 
@@ -321,7 +368,12 @@ func main() {
 		}
 
 		displayName := normalizeDisplayName(r.FormValue("display_name"), userEmail)
-		username := normalizeUsername(r.FormValue("username"), userEmail)
+		rawUsername := r.FormValue("username")
+		if !isUsernameFormatValid(rawUsername) {
+			http.Redirect(w, r, "/profile?error=invalid_username", http.StatusSeeOther)
+			return
+		}
+		username := normalizeUsername(rawUsername, userEmail)
 		newBio := strings.TrimSpace(r.FormValue("bio"))
 		website := strings.TrimSpace(r.FormValue("website"))
 		instagram := strings.TrimSpace(r.FormValue("instagram"))
@@ -336,6 +388,10 @@ func main() {
 			userEmail,
 		)
 		if err != nil {
+			if strings.Contains(err.Error(), "users.username") || strings.Contains(err.Error(), "idx_users_username") {
+				http.Redirect(w, r, "/profile?error=username_taken", http.StatusSeeOther)
+				return
+			}
 			log.Printf("Error updating profile: %v", err)
 			http.Error(w, "Failed to update profile", http.StatusInternalServerError)
 			return
