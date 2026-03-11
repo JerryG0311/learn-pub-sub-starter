@@ -301,7 +301,10 @@
                     <div class="modal-helper">Example: enter 45 to show the CTA 45 seconds into the video.</div>
                 </div>
 
-                <button type="submit" style="width:100%; background:#00adef; color:white; padding:12px; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Save CTA Settings</button>
+                <div style="display:flex; gap:10px; margin-top:6px;">
+                    <button type="button" onclick="clearCTAFields()" style="flex:1; background:#2a2a2a; color:#ffffff; padding:12px; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Clear CTA</button>
+                    <button type="submit" style="flex:1; background:#00adef; color:white; padding:12px; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Save CTA Settings</button>
+                </div>
             </form>
         </div>
     </div>
@@ -462,6 +465,12 @@
 
         function closeCTAModal() {
             document.getElementById('ctaModal').style.display = 'none';
+        }
+
+        function clearCTAFields() {
+            document.getElementById('ctaTextInput').value = '';
+            document.getElementById('ctaUrlInput').value = '';
+            document.getElementById('ctaTimeInput').value = '';
         }
     </script>
 </body>
