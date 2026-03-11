@@ -502,7 +502,7 @@
                         </div>
                         <div class="action-buttons">
                             <button class="btn" style="background:#00adef;" onclick="openShareModal('{{.Video.Title}}')">Share</button>
-                            <a href="{{.Video.SourcePath}}" download class="btn" style="background:#2c7a7b;">Download</a>
+                            <a href="{{.Video.SourcePath}}" download class="btn" style="background:#2c7a7b;" onclick="trackVideoDownload()">Download</a>
                         </div>
                     </div>
                 </div>
@@ -591,6 +591,8 @@
             document.getElementById('embedCodeInput').value = embedCode;
             document.getElementById('shareX').href = `https://twitter.com/intent/tweet?text=Check out ${title}&url=${url}`;
             document.getElementById('shareLI').href = `https://www.linkedin.com/sharing/share-offsite/?url=${url}`;
+            document.getElementById('shareX').onclick = () => sendAnalyticsPing('share-click', currentVideoId);
+            document.getElementById('shareLI').onclick = () => sendAnalyticsPing('share-click', currentVideoId);
         }
         function switchTab(tab) {
             currentTab = tab;
@@ -604,11 +606,35 @@
             const copyText = document.getElementById(inputId);
             copyText.select();
             navigator.clipboard.writeText(copyText.value);
+            sendAnalyticsPing('share-click', currentVideoId);
             const btn = document.getElementById('copyBtn');
             btn.innerText = "Copied!";
             setTimeout(() => { btn.innerText = "Copy to Clipboard"; }, 2000);
         }
         function closeModal() { document.getElementById('shareModal').style.display = 'none'; }
+
+        const currentVideoId = '{{.Video.ID}}';
+
+        function sendAnalyticsPing(endpoint, id) {
+            if (!id) return;
+            const payload = JSON.stringify({ videoId: id });
+
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon(`/${endpoint}/${id}`, new Blob([payload], { type: 'application/json' }));
+                return;
+            }
+
+            fetch(`/${endpoint}/${id}`, {
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: payload,
+                keepalive: true
+            }).catch(() => {});
+        }
+
+        function trackVideoDownload() {
+            sendAnalyticsPing('download-click', currentVideoId);
+        }
 
         document.querySelectorAll('.video-stage').forEach((stage) => {
             const video = stage.querySelector('video');

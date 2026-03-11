@@ -38,6 +38,8 @@ type VideoData struct {
 	CTAURL         string
 	CTATimeSeconds int
 	CTAClicks      int
+	ShareCount     int
+	DownloadCount  int
 }
 
 type User struct {
@@ -996,6 +998,50 @@ func main() {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	http.HandleFunc("/share-click/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		id := filepath.Base(r.URL.Path)
+		if id == "" {
+			http.Error(w, "missing video id", http.StatusBadRequest)
+			return
+		}
+
+		_, err := db.Exec("UPDATE videos SET share_count = share_count + 1 WHERE id = ?", id)
+		if err != nil {
+			log.Printf("Share click update error for %s: %v", id, err)
+			http.Error(w, "failed to record share click", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/download-click/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		id := filepath.Base(r.URL.Path)
+		if id == "" {
+			http.Error(w, "missing video id", http.StatusBadRequest)
+			return
+		}
+
+		_, err := db.Exec("UPDATE videos SET download_count = download_count + 1 WHERE id = ?", id)
+		if err != nil {
+			log.Printf("Download click update error for %s: %v", id, err)
+			http.Error(w, "failed to record download click", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	http.HandleFunc("/stats/", func(w http.ResponseWriter, r *http.Request) {
 		userEmail := getLoggedInUser(r)
 		if userEmail == "" {
@@ -1012,7 +1058,23 @@ func main() {
 		var v VideoData
 		var thumbnail, playlist sql.NullString
 		err := db.QueryRow(`
-			SELECT id, user_id, title, description, playlist, source_path, thumbnail_url, views, created_at, status, IFNULL(cta_text, ''), IFNULL(cta_url, ''), IFNULL(cta_time_seconds, 0), IFNULL(cta_clicks, 0)
+			SELECT 
+			id, 
+			user_id, 
+			title, 
+			description, 
+			playlist, 
+			source_path, 
+			thumbnail_url, 
+			views, 
+			created_at, 
+			status, 
+			IFNULL(cta_text, ''), 
+			IFNULL(cta_url, ''), 
+			IFNULL(cta_time_seconds, 0), 
+			IFNULL(cta_clicks, 0),
+			IFNULL(share_count, 0),
+			IFNULL(download_count, 0)
 			FROM videos
 			WHERE id = ? AND user_id = ?
 		`, id, userEmail).Scan(
@@ -1030,6 +1092,8 @@ func main() {
 			&v.CTAURL,
 			&v.CTATimeSeconds,
 			&v.CTAClicks,
+			&v.ShareCount,
+			&v.DownloadCount,
 		)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -1048,8 +1112,8 @@ func main() {
 			v.ThumbnailURL = thumbnail.String
 		}
 
-		shareCount := 0
-		downloadCount := 0
+		shareCount := v.ShareCount
+		downloadCount := v.DownloadCount
 		ctr := 0.0
 		if v.Views > 0 {
 			ctr = (float64(v.CTAClicks) / float64(v.Views)) * 100

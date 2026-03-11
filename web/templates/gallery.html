@@ -269,7 +269,7 @@
                         <div class="action-icons" {{if ne .Status "COMPLETED"}}style="opacity:0.3; pointer-events:none;"{{end}}>
                             <button class="icon-btn" onclick="toggleLike(this, '{{.ID}}')"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>
                             <button class="icon-btn" onclick="openShareModal('{{.Title}}', '{{.ID}}')"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92c0-1.61-1.31-2.92-2.92-2.92z"/></svg></button>
-                            <a href="{{.SourcePath}}" download class="icon-btn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></a>
+                            <a href="{{.SourcePath}}" download class="icon-btn" onclick="trackDownload('{{.ID}}')"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></a>
                         </div>
                     </td>
                 </tr>
@@ -386,13 +386,53 @@
         }
         window.onclick = function() { document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none'); }
 
+        let currentShareVideoId = '';
+
+        function sendAnalyticsPing(endpoint, id) {
+            if (!id) return Promise.resolve();
+            const payload = JSON.stringify({ videoId: id });
+
+            if (navigator.sendBeacon) {
+                const ok = navigator.sendBeacon(`/${endpoint}/${id}`, new Blob([payload], { type: 'application/json' }));
+                if (ok) return Promise.resolve();
+            }
+
+            return fetch(`/${endpoint}/${id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload,
+                keepalive: true
+            }).catch(() => {});
+        }
+
+        function trackDownload(id) {
+            sendAnalyticsPing('download-click', id);
+        }
+
+        function handleShareLinkClick(event, url) {
+            event.preventDefault();
+            const targetUrl = url;
+            sendAnalyticsPing('share-click', currentShareVideoId).finally(() => {
+                window.open(targetUrl, '_blank', 'noopener,noreferrer');
+            });
+        }
+
         function openShareModal(title, id) {
             const videoUrl = `${window.location.origin}/view/${id}`;
+            currentShareVideoId = id;
             document.getElementById('shareModal').style.display = 'flex';
             document.getElementById('shareUrlInput').value = videoUrl;
-            document.getElementById('shareX').href = `https://x.com/intent/tweet?url=${encodeURIComponent(videoUrl)}&text=${encodeURIComponent(title)}`;
-            document.getElementById('shareFB').href = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(videoUrl)}`;
-            document.getElementById('shareLI').href = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(videoUrl)}`;
+            const xUrl = `https://x.com/intent/tweet?url=${encodeURIComponent(videoUrl)}&text=${encodeURIComponent(title)}`;
+            const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(videoUrl)}`;
+            const liUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(videoUrl)}`;
+
+            document.getElementById('shareX').href = xUrl;
+            document.getElementById('shareFB').href = fbUrl;
+            document.getElementById('shareLI').href = liUrl;
+
+            document.getElementById('shareX').onclick = (event) => handleShareLinkClick(event, xUrl);
+            document.getElementById('shareFB').onclick = (event) => handleShareLinkClick(event, fbUrl);
+            document.getElementById('shareLI').onclick = (event) => handleShareLinkClick(event, liUrl);
         }
         function closeModal() { document.getElementById('shareModal').style.display = 'none'; }
         
@@ -400,6 +440,7 @@
             const input = document.getElementById('shareUrlInput');
             input.select();
             navigator.clipboard.writeText(input.value);
+            sendAnalyticsPing('share-click', currentShareVideoId);
             document.getElementById('copyBtn').innerText = "Copied!";
             setTimeout(() => { document.getElementById('copyBtn').innerText = "Copy to Clipboard"; }, 2000);
         }
