@@ -24,16 +24,20 @@ import (
 )
 
 type VideoData struct {
-	ID           string
-	UserID       string
-	Title        string
-	Description  string
-	Playlist     string
-	SourcePath   string
-	ThumbnailURL string
-	Views        int
-	CreatedAt    time.Time
-	Status       string
+	ID             string
+	UserID         string
+	Title          string
+	Description    string
+	Playlist       string
+	SourcePath     string
+	ThumbnailURL   string
+	Views          int
+	CreatedAt      time.Time
+	Status         string
+	CTAText        string
+	CTAURL         string
+	CTATimeSeconds int
+	CTAClicks      int
 }
 
 type User struct {
@@ -70,6 +74,14 @@ type ViewPageData struct {
 	Creator       ProfileData
 	RelatedVideos []VideoData
 	IsEmbed       bool
+}
+
+type StatsPageData struct {
+	Video         VideoData
+	UserEmail     string
+	ShareCount    int
+	DownloadCount int
+	CTR           float64
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
@@ -563,7 +575,7 @@ func main() {
 		}
 
 		// 1. Fetch only videos belonging to THIS logged-in user
-		rows, err := db.Query("SELECT id, status, title, playlist, source_path, thumbnail_url, views FROM videos WHERE user_id = ? ORDER BY created_at DESC", userEmail)
+		rows, err := db.Query("SELECT id, status, title, playlist, source_path, thumbnail_url, views, IFNULL(cta_text, ''), IFNULL(cta_url, ''), IFNULL(cta_time_seconds, 0) FROM videos WHERE user_id = ? ORDER BY created_at DESC", userEmail)
 		if err != nil {
 			log.Printf("Database Query Error: %v", err)
 			http.Error(w, "Unable to load your library", http.StatusInternalServerError)
@@ -577,7 +589,7 @@ func main() {
 			var thumb, playlist sql.NullString
 
 			// Ensure we scan correctly into NullStrings
-			err := rows.Scan(&v.ID, &v.Status, &v.Title, &playlist, &v.SourcePath, &thumb, &v.Views)
+			err := rows.Scan(&v.ID, &v.Status, &v.Title, &playlist, &v.SourcePath, &thumb, &v.Views, &v.CTAText, &v.CTAURL, &v.CTATimeSeconds)
 			if err != nil {
 				log.Printf("Scan error for video %s: %v", v.ID, err)
 				continue
@@ -739,7 +751,7 @@ func main() {
 		var thumbnail sql.NullString
 
 		query := `
-			SELECT id, user_id, title, description, playlist, source_path, thumbnail_url, views, created_at, status
+			SELECT id, user_id, title, description, playlist, source_path, thumbnail_url, views, created_at, status, IFNULL(cta_text, ''), IFNULL(cta_url, ''), IFNULL(cta_time_seconds, 0), IFNULL(cta_clicks, 0)
 			FROM videos
 			WHERE id = ?`
 
@@ -754,6 +766,10 @@ func main() {
 			&v.Views,
 			&v.CreatedAt,
 			&v.Status,
+			&v.CTAText,
+			&v.CTAURL,
+			&v.CTATimeSeconds,
+			&v.CTAClicks,
 		)
 		if err != nil {
 			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
@@ -892,6 +908,171 @@ func main() {
 			db.Exec("UPDATE videos SET thumbnail_url = ? WHERE id = ?", finalThumbURL, id)
 		}
 		http.Redirect(w, r, "/gallery", 303)
+	})
+
+	http.HandleFunc("/manage-cta/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+
+		userEmail := getLoggedInUser(r)
+		if userEmail == "" {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		id := filepath.Base(r.URL.Path)
+		if id == "" {
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+
+		if err := r.ParseForm(); err != nil {
+			log.Printf("CTA form parse error for %s: %v", id, err)
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+
+		ctaText := strings.TrimSpace(r.FormValue("cta_text"))
+		ctaURL := strings.TrimSpace(r.FormValue("cta_url"))
+		ctaTimeRaw := strings.TrimSpace(r.FormValue("cta_time_seconds"))
+		ctaTimeSeconds := 0
+		if ctaTimeRaw != "" {
+			if _, err := fmt.Sscanf(ctaTimeRaw, "%d", &ctaTimeSeconds); err != nil || ctaTimeSeconds < 0 {
+				log.Printf("Invalid CTA seconds for %s: %q", id, ctaTimeRaw)
+				http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+				return
+			}
+		}
+
+		if ctaText == "" || ctaURL == "" {
+			ctaText = ""
+			ctaURL = ""
+			ctaTimeSeconds = 0
+		}
+
+		result, err := db.Exec(
+			"UPDATE videos SET cta_text = ?, cta_url = ?, cta_time_seconds = ? WHERE id = ? AND user_id = ?",
+			ctaText,
+			ctaURL,
+			ctaTimeSeconds,
+			id,
+			userEmail,
+		)
+		if err != nil {
+			log.Printf("CTA update error for %s: %v", id, err)
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 0 {
+			log.Printf("CTA update skipped for %s: no matching video for user %s", id, userEmail)
+		}
+
+		http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+	})
+
+	http.HandleFunc("/cta-click/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		id := filepath.Base(r.URL.Path)
+		if id == "" {
+			http.Error(w, "missing video id", http.StatusBadRequest)
+			return
+		}
+
+		_, err := db.Exec("UPDATE videos SET cta_clicks = cta_clicks + 1 WHERE id = ?", id)
+		if err != nil {
+			log.Printf("CTA click update error for %s: %v", id, err)
+			http.Error(w, "failed to record cta click", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/stats/", func(w http.ResponseWriter, r *http.Request) {
+		userEmail := getLoggedInUser(r)
+		if userEmail == "" {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		id := filepath.Base(r.URL.Path)
+		if id == "" {
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+
+		var v VideoData
+		var thumbnail, playlist sql.NullString
+		err := db.QueryRow(`
+			SELECT id, user_id, title, description, playlist, source_path, thumbnail_url, views, created_at, status, IFNULL(cta_text, ''), IFNULL(cta_url, ''), IFNULL(cta_time_seconds, 0), IFNULL(cta_clicks, 0)
+			FROM videos
+			WHERE id = ? AND user_id = ?
+		`, id, userEmail).Scan(
+			&v.ID,
+			&v.UserID,
+			&v.Title,
+			&v.Description,
+			&playlist,
+			&v.SourcePath,
+			&thumbnail,
+			&v.Views,
+			&v.CreatedAt,
+			&v.Status,
+			&v.CTAText,
+			&v.CTAURL,
+			&v.CTATimeSeconds,
+			&v.CTAClicks,
+		)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+				return
+			}
+			log.Printf("Stats query error for %s: %v", id, err)
+			http.Error(w, "Unable to load video stats", http.StatusInternalServerError)
+			return
+		}
+
+		if playlist.Valid {
+			v.Playlist = playlist.String
+		}
+		if thumbnail.Valid {
+			v.ThumbnailURL = thumbnail.String
+		}
+
+		shareCount := 0
+		downloadCount := 0
+		ctr := 0.0
+		if v.Views > 0 {
+			ctr = (float64(v.CTAClicks) / float64(v.Views)) * 100
+		}
+
+		tmpl, err := template.ParseFiles("web/templates/stats.html")
+		if err != nil {
+			log.Printf("Stats template error: %v", err)
+			http.Error(w, "Stats template not found", http.StatusInternalServerError)
+			return
+		}
+
+		data := StatsPageData{
+			Video:         v,
+			UserEmail:     userEmail,
+			ShareCount:    shareCount,
+			DownloadCount: downloadCount,
+			CTR:           ctr,
+		}
+
+		if err := tmpl.Execute(w, data); err != nil {
+			log.Printf("Stats template execution error: %v", err)
+		}
 	})
 
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))

@@ -67,8 +67,17 @@
         /* --- Thumbnail FIX: Full Frame --- */
         .thumb-column { width: 190px; background: #181818; }
         .thumb-wrapper {
-            position: relative; width: 180px; height: 101px; 
-            border-radius: 8px; overflow: hidden; background: #000;
+            position: relative; width: 180px; height: 101px;
+            border-radius: 8px; overflow: visible; background: transparent;
+            box-shadow: none;
+        }
+        .thumb-media {
+            position: relative;
+            width: 180px;
+            height: 101px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #000;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
         .main-thumb { 
@@ -122,7 +131,10 @@
 
         /* --- List View Table --- */
         #wrapper { padding: 0 40px 40px 40px; }
-        table { width: 100%; border-collapse: collapse; background: #181818; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.22); border: 1px solid #242424; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; background: #181818; border-radius: 12px; overflow: visible; box-shadow: 0 8px 24px rgba(0,0,0,0.22); border: 1px solid #242424; }
+        thead, tbody, tr {
+            overflow: visible;
+        }
         th { text-align: left; padding: 15px 20px; background: #141414; color: #9ca3af; font-size: 0.75em; text-transform: uppercase; letter-spacing: 1px; }
         td { padding: 20px; border-bottom: 1px solid #242424; vertical-align: top; color: #e5e7eb; background: #181818; }
         tbody tr { background: #181818; }
@@ -153,6 +165,30 @@
         /* Modals */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: #181818; padding: 30px; border-radius: 12px; width: 90%; max-width: 400px; position: relative; text-align: center; color: #ffffff; border: 1px solid #282828; }
+        .modal-content h2 { margin-top: 0; color: #ffffff; }
+        .modal-field { text-align: left; margin-bottom: 14px; }
+        .modal-field label { display: block; margin-bottom: 6px; font-size: 13px; color: #9ca3af; font-weight: 600; }
+        .modal-field input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #282828;
+            border-radius: 8px;
+            background: #101010;
+            color: #ffffff;
+            box-sizing: border-box;
+            outline: none;
+        }
+        .modal-field input:focus {
+            border-color: #00adef;
+            box-shadow: 0 0 0 3px rgba(0, 173, 239, 0.12);
+        }
+        .modal-helper {
+            text-align: left;
+            font-size: 12px;
+            color: #6b7280;
+            line-height: 1.45;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body class="list-view">
@@ -192,20 +228,24 @@
                 <tr class="video-row" data-id="{{.ID}}">
                     <td class="thumb-column">
                         <div class="thumb-wrapper">
-                            {{if eq .Status "COMPLETED"}}
-                                <img src="{{.ThumbnailURL}}" class="main-thumb">
-                                <a href="/view/{{.ID}}" class="play-overlay"><svg style="width:36px; fill:white;" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></a>
-                            {{else}}
-                                <div class="processing-box"><div class="spinner"></div><span style="font-size:9px; font-weight:800;">PROCESSING</span></div>
-                            {{end}}
-                            
+                            <div class="thumb-media">
+                                {{if eq .Status "COMPLETED"}}
+                                    <img src="{{.ThumbnailURL}}" class="main-thumb">
+                                    <a href="/view/{{.ID}}" class="play-overlay"><svg style="width:36px; fill:white;" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></a>
+                                {{else}}
+                                    <div class="processing-box"><div class="spinner"></div><span style="font-size:9px; font-weight:800;">PROCESSING</span></div>
+                                {{end}}
+                            </div>
+
                             <div class="dots-container">
                                 <button class="dots-btn" onclick="toggleMenu(event, '{{.ID}}')">
                                     <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
                                 </button>
                                 <div id="menu-{{.ID}}" class="dropdown-menu">
                                     {{if eq .Status "COMPLETED"}}
+                                    <button onclick="window.location.href='/stats/{{.ID}}'">Stats</button>
                                     <button onclick="openThumbModal('{{.ID}}', '{{.ThumbnailURL}}')">Edit Thumbnail</button>
+                                    <button onclick="openCTAModal('{{.ID}}', '{{js .CTAText}}', '{{js .CTAURL}}', '{{.CTATimeSeconds}}')">CTA Manager</button>
                                     {{end}}
                                     <form action="/delete/{{.ID}}" method="POST" onsubmit="return confirm('Delete video?');">
                                         <button type="submit" style="color:#e53e3e">Delete</button>
@@ -236,6 +276,34 @@
                 {{end}}
             </tbody>
         </table>
+    </div>
+
+    <div id="ctaModal" class="modal-overlay">
+        <div class="modal-content">
+            <button onclick="closeCTAModal()" style="position:absolute; top:10px; right:15px; border:none; background:none; font-size:24px; cursor:pointer; color:#a0aec0;">&times;</button>
+            <h2>CTA Manager</h2>
+            <form id="ctaForm" method="POST">
+                <div class="modal-field">
+                    <label for="ctaTextInput">CTA Button Text</label>
+                    <input id="ctaTextInput" type="text" name="cta_text" placeholder="Get Access">
+                    <div class="modal-helper">This is the text viewers will see on the CTA button.</div>
+                </div>
+
+                <div class="modal-field">
+                    <label for="ctaUrlInput">CTA URL</label>
+                    <input id="ctaUrlInput" type="url" name="cta_url" placeholder="https://your-link.com">
+                    <div class="modal-helper">Where should the viewer go when they click the CTA?</div>
+                </div>
+
+                <div class="modal-field">
+                    <label for="ctaTimeInput">Show CTA At (seconds)</label>
+                    <input id="ctaTimeInput" type="number" min="0" name="cta_time_seconds" placeholder="45">
+                    <div class="modal-helper">Example: enter 45 to show the CTA 45 seconds into the video.</div>
+                </div>
+
+                <button type="submit" style="width:100%; background:#00adef; color:white; padding:12px; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Save CTA Settings</button>
+            </form>
+        </div>
     </div>
 
     <div id="shareModal" class="modal-overlay">
@@ -342,6 +410,18 @@
             document.getElementById('thumbForm').action = `/manage-thumb/${id}`;
         }
         function closeThumbModal() { document.getElementById('thumbModal').style.display = 'none'; }
+
+        function openCTAModal(id, text, url, timeSeconds) {
+            document.getElementById('ctaModal').style.display = 'flex';
+            document.getElementById('ctaForm').action = `/manage-cta/${id}`;
+            document.getElementById('ctaTextInput').value = text || '';
+            document.getElementById('ctaUrlInput').value = url || '';
+            document.getElementById('ctaTimeInput').value = timeSeconds && timeSeconds !== '0' ? timeSeconds : '';
+        }
+
+        function closeCTAModal() {
+            document.getElementById('ctaModal').style.display = 'none';
+        }
     </script>
 </body>
 </html>

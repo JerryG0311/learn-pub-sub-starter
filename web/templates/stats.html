@@ -1,0 +1,351 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Stats • Vidify</title>
+    <style>
+        body {
+            margin: 0;
+            background: #0f0f0f;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        .page {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 32px 22px 48px;
+            box-sizing: border-box;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+        }
+
+        .back-link {
+            color: #00adef;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .user-pill {
+            font-size: 0.85em;
+            color: #9ca3af;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #181818;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid #282828;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 340px minmax(0, 1fr);
+            gap: 28px;
+            margin-bottom: 26px;
+            align-items: start;
+        }
+
+        .thumb-card,
+        .meta-card,
+        .metric-card,
+        .details-card {
+            background: #181818;
+            border: 1px solid #282828;
+            border-radius: 16px;
+            box-shadow: 0 16px 36px rgba(0,0,0,0.24);
+        }
+
+        .thumb-card {
+            overflow: hidden;
+        }
+
+        .thumb-card img {
+            width: 100%;
+            display: block;
+            aspect-ratio: 16 / 9;
+            object-fit: cover;
+            background: #101010;
+        }
+
+        .thumb-card .thumb-body {
+            padding: 16px;
+        }
+
+        .thumb-label {
+            font-size: 12px;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: #9ca3af;
+            margin-bottom: 8px;
+        }
+
+        .thumb-title {
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1.35;
+            color: #ffffff;
+            margin: 0;
+        }
+
+        .meta-card {
+            padding: 24px;
+        }
+
+        .eyebrow {
+            font-size: 12px;
+            letter-spacing: 0.9px;
+            text-transform: uppercase;
+            color: #9ca3af;
+            margin-bottom: 8px;
+        }
+
+        h1 {
+            margin: 0 0 10px;
+            font-size: 32px;
+            line-height: 1.15;
+            color: #ffffff;
+        }
+
+        .subtitle {
+            margin: 0;
+            color: #9ca3af;
+            line-height: 1.6;
+            font-size: 15px;
+            max-width: 700px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-bottom: 22px;
+        }
+
+        .metric-card {
+            padding: 18px;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #9ca3af;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 30px;
+            font-weight: 800;
+            color: #ffffff;
+            line-height: 1;
+            margin-bottom: 6px;
+        }
+
+        .metric-subtext {
+            font-size: 13px;
+            color: #6b7280;
+            line-height: 1.5;
+        }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 16px;
+        }
+
+        .details-card {
+            padding: 20px;
+        }
+
+        .section-title {
+            margin: 0 0 16px;
+            font-size: 18px;
+            color: #ffffff;
+        }
+
+        .detail-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #242424;
+            align-items: start;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .detail-key {
+            color: #9ca3af;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .detail-value {
+            color: #ffffff;
+            font-size: 14px;
+            text-align: right;
+            word-break: break-word;
+        }
+
+        .cta-link {
+            color: #00adef;
+            text-decoration: none;
+        }
+
+        .cta-link:hover {
+            text-decoration: underline;
+        }
+
+        .empty-state {
+            color: #6b7280;
+        }
+
+        @media (max-width: 980px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
+
+            .metrics-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .details-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .page {
+                padding: 24px 16px 40px;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 26px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="topbar">
+            <a class="back-link" href="/gallery">← Back to Gallery</a>
+            <div class="user-pill">Signed in as {{.UserEmail}}</div>
+        </div>
+
+        <div class="hero">
+            <div class="thumb-card">
+                <img src="{{.Video.ThumbnailURL}}" alt="{{.Video.Title}}">
+                <div class="thumb-body">
+                    <div class="thumb-label">Video Snapshot</div>
+                    <p class="thumb-title">{{.Video.Title}}</p>
+                </div>
+            </div>
+
+            <div class="meta-card">
+                <div class="eyebrow">Video Analytics</div>
+                <h1>{{.Video.Title}}</h1>
+                <p class="subtitle">Track how this video is performing across views, CTA engagement, downloads, and shares. This is the foundation for a proper Vimeo-style stats dashboard.</p>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Views</div>
+                <div class="metric-value">{{.Video.Views}}</div>
+                <div class="metric-subtext">Total watch page views recorded for this video.</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">CTA Clicks</div>
+                <div class="metric-value">{{.Video.CTAClicks}}</div>
+                <div class="metric-subtext">How many viewers clicked your CTA overlay button.</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">CTA CTR</div>
+                <div class="metric-value">{{printf "%.1f" .CTR}}%</div>
+                <div class="metric-subtext">CTA clicks divided by total views.</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Downloads</div>
+                <div class="metric-value">{{.DownloadCount}}</div>
+                <div class="metric-subtext">Download tracking placeholder for the next analytics pass.</div>
+            </div>
+        </div>
+
+        <div class="details-grid">
+            <div class="details-card">
+                <h2 class="section-title">CTA Settings</h2>
+                <div class="detail-list">
+                    <div class="detail-row">
+                        <div class="detail-key">CTA Text</div>
+                        <div class="detail-value">{{if .Video.CTAText}}{{.Video.CTAText}}{{else}}<span class="empty-state">No CTA configured</span>{{end}}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-key">CTA URL</div>
+                        <div class="detail-value">
+                            {{if .Video.CTAURL}}
+                                <a class="cta-link" href="{{.Video.CTAURL}}" target="_blank" rel="noopener noreferrer">{{.Video.CTAURL}}</a>
+                            {{else}}
+                                <span class="empty-state">No CTA URL configured</span>
+                            {{end}}
+                        </div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-key">CTA Trigger Time</div>
+                        <div class="detail-value">{{if gt .Video.CTATimeSeconds 0}}{{.Video.CTATimeSeconds}} seconds{{else}}<span class="empty-state">CTA disabled</span>{{end}}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="details-card">
+                <h2 class="section-title">Additional Signals</h2>
+                <div class="detail-list">
+                    <div class="detail-row">
+                        <div class="detail-key">Shares</div>
+                        <div class="detail-value">{{.ShareCount}}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-key">Downloads</div>
+                        <div class="detail-value">{{.DownloadCount}}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-key">Status</div>
+                        <div class="detail-value">{{.Video.Status}}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-key">Uploaded</div>
+                        <div class="detail-value">{{.Video.CreatedAt.Format "Jan 02, 2006"}}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

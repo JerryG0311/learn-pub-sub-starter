@@ -104,6 +104,85 @@
             opacity: 0;
         }
 
+        .video-cta-overlay {
+            position: absolute;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%);
+            background: rgba(10, 10, 10, 0.88);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 14px;
+            padding: 12px;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+            z-index: 3;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            width: calc(100% - 32px);
+            max-width: 420px;
+            box-sizing: border-box;
+        }
+
+        .video-stage.show-cta .video-cta-overlay {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .video-stage.hide-cta-play-badge .main-play-badge {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .video-cta-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .video-cta-copy {
+            min-width: 0;
+        }
+
+        .video-cta-text {
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1.3;
+            word-break: break-word;
+        }
+
+        .video-cta-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            background: #00adef;
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            border-radius: 10px;
+            padding: 11px 16px;
+            flex-shrink: 0;
+        }
+
+        .video-cta-button:hover {
+            background: #0096cf;
+        }
+
+        @media (max-width: 640px) {
+            .video-cta-content {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .video-cta-button {
+                width: 100%;
+            }
+        }
+
         .video-info {
             margin-top: 20px;
         }
@@ -378,20 +457,40 @@
         {{end}}
 
         {{if .IsEmbed}}
-        <div class="video-stage is-embed-stage">
+        <div class="video-stage is-embed-stage" data-cta-seconds="{{.Video.CTATimeSeconds}}">
             <div class="main-play-badge"></div>
             <video controls autoplay poster="{{.Video.ThumbnailURL}}" class="is-embed-video">
                 <source src="{{.Video.SourcePath}}" type="video/mp4">
             </video>
+            {{if and .Video.CTAText .Video.CTAURL}}
+            <div class="video-cta-overlay">
+                <div class="video-cta-content">
+                    <div class="video-cta-copy">
+                        <div class="video-cta-text">{{.Video.CTAText}}</div>
+                    </div>
+                    <a class="video-cta-button" href="{{.Video.CTAURL}}" target="_blank" rel="noopener noreferrer" data-cta-track="true" data-video-id="{{.Video.ID}}">{{.Video.CTAText}}</a>
+                </div>
+            </div>
+            {{end}}
         </div>
         {{else}}
         <div class="watch-layout">
             <div class="main-column">
-                <div class="video-stage">
+                <div class="video-stage" data-cta-seconds="{{.Video.CTATimeSeconds}}">
                     <div class="main-play-badge"></div>
                     <video controls poster="{{.Video.ThumbnailURL}}">
                         <source src="{{.Video.SourcePath}}" type="video/mp4">
                     </video>
+                    {{if and .Video.CTAText .Video.CTAURL}}
+                    <div class="video-cta-overlay">
+                        <div class="video-cta-content">
+                            <div class="video-cta-copy">
+                                <div class="video-cta-text">{{.Video.CTAText}}</div>
+                            </div>
+                            <a class="video-cta-button" href="{{.Video.CTAURL}}" target="_blank" rel="noopener noreferrer" data-cta-track="true" data-video-id="{{.Video.ID}}">{{.Video.CTAText}}</a>
+                        </div>
+                    </div>
+                    {{end}}
                 </div>
 
                 <div class="video-info">
@@ -514,6 +613,8 @@
         document.querySelectorAll('.video-stage').forEach((stage) => {
             const video = stage.querySelector('video');
             const playBadge = stage.querySelector('.main-play-badge');
+            const ctaOverlay = stage.querySelector('.video-cta-overlay');
+            const ctaSeconds = Number(stage.dataset.ctaSeconds || 0);
             if (!video) return;
 
             const syncPlayState = () => {
@@ -521,6 +622,23 @@
                     stage.classList.remove('is-playing');
                 } else {
                     stage.classList.add('is-playing');
+                }
+            };
+
+            const syncCTAState = () => {
+                if (!ctaOverlay || !ctaSeconds || video.ended) {
+                    stage.classList.remove('show-cta');
+                    stage.classList.remove('hide-cta-play-badge');
+                    return;
+                }
+
+                const shouldShowCTA = video.currentTime >= ctaSeconds;
+                if (shouldShowCTA) {
+                    stage.classList.add('show-cta');
+                    stage.classList.add('hide-cta-play-badge');
+                } else {
+                    stage.classList.remove('show-cta');
+                    stage.classList.remove('hide-cta-play-badge');
                 }
             };
 
@@ -534,12 +652,46 @@
                 });
             }
 
-            video.addEventListener('play', syncPlayState);
-            video.addEventListener('pause', syncPlayState);
-            video.addEventListener('ended', syncPlayState);
+            video.addEventListener('play', () => {
+                syncPlayState();
+                syncCTAState();
+            });
+            video.addEventListener('pause', () => {
+                syncPlayState();
+                syncCTAState();
+            });
+            video.addEventListener('ended', () => {
+                syncPlayState();
+                syncCTAState();
+            });
+            video.addEventListener('timeupdate', syncCTAState);
+            video.addEventListener('seeked', syncCTAState);
 
             syncPlayState();
+            syncCTAState();
         });
+
+        document.querySelectorAll('[data-cta-track="true"]').forEach((link) => {
+            link.addEventListener('click', () => {
+                const videoId = link.dataset.videoId;
+                if (!videoId) return;
+
+                const payload = JSON.stringify({ videoId });
+
+                if (navigator.sendBeacon) {
+                    navigator.sendBeacon(`/cta-click/${videoId}`, new Blob([payload], { type: 'application/json' }));
+                    return;
+                }
+
+                fetch(`/cta-click/${videoId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: payload,
+                    keepalive: true
+                }).catch(() => {});
+            });
+        });
+        
 
     </script>
 </body>
