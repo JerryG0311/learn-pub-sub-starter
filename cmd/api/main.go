@@ -25,23 +25,27 @@ import (
 )
 
 type VideoData struct {
-	ID             string
-	UserID         string
-	Title          string
-	Description    string
-	Playlist       string
-	SourcePath     string
-	ThumbnailURL   string
-	Views          int
-	CreatedAt      time.Time
-	Status         string
-	CTAText        string
-	CTAURL         string
-	CTATimeSeconds int
-	CTAType        string
-	CTAClicks      int
-	ShareCount     int
-	DownloadCount  int
+	ID                 string
+	UserID             string
+	Title              string
+	Description        string
+	Playlist           string
+	SourcePath         string
+	ThumbnailURL       string
+	Views              int
+	CreatedAt          time.Time
+	Status             string
+	CTAText            string
+	CTAURL             string
+	CTATimeSeconds     int
+	CTAType            string
+	CTAClicks          int
+	ShareCount         int
+	DownloadCount      int
+	PlayerAutoplay     bool
+	PlayerMuted        bool
+	PlayerControls     bool
+	PlayerStartSeconds int
 }
 
 type User struct {
@@ -144,13 +148,49 @@ func parsePlayerOptions(r *http.Request) PlayerOptions {
 	return options
 }
 
+func resolvePlayerOptions(r *http.Request, video VideoData) PlayerOptions {
+	options := PlayerOptions{
+		Autoplay:     video.PlayerAutoplay,
+		Muted:        video.PlayerMuted,
+		Controls:     video.PlayerControls,
+		StartSeconds: video.PlayerStartSeconds,
+	}
+
+	query := r.URL.Query()
+
+	if raw := strings.TrimSpace(strings.ToLower(query.Get("autoplay"))); raw != "" {
+		options.Autoplay = raw == "1" || raw == "true" || raw == "yes"
+	}
+
+	if raw := strings.TrimSpace(strings.ToLower(query.Get("muted"))); raw != "" {
+		options.Muted = raw == "1" || raw == "true" || raw == "yes"
+	}
+
+	if raw := strings.TrimSpace(strings.ToLower(query.Get("controls"))); raw != "" {
+		options.Controls = !(raw == "0" || raw == "false" || raw == "no")
+	}
+
+	if raw := strings.TrimSpace(query.Get("start")); raw != "" {
+		var parsedStart int
+		if _, err := fmt.Sscanf(raw, "%d", &parsedStart); err == nil && parsedStart >= 0 {
+			options.StartSeconds = parsedStart
+		}
+	}
+
+	if options.Autoplay {
+		options.Muted = true
+	}
+
+	return options
+}
+
 func renderVideoPage(db *sql.DB, w http.ResponseWriter, r *http.Request, id string, isEmbed bool) {
 	if id == "" {
 		http.Redirect(w, r, "/gallery", http.StatusSeeOther)
 		return
 	}
 
-	playerOptions := parsePlayerOptions(r)
+	var playerOptions PlayerOptions
 	if !isEmbed {
 		db.Exec("UPDATE videos SET views = views + 1 WHERE id = ?", id)
 	}
@@ -174,7 +214,11 @@ func renderVideoPage(db *sql.DB, w http.ResponseWriter, r *http.Request, id stri
 		IFNULL(cta_url, ''), 
 		IFNULL(cta_time_seconds, 0), 
 		IFNULL(cta_type, 'button'),
-		IFNULL(cta_clicks, 0)
+		IFNULL(cta_clicks, 0),
+		IFNULL(player_autoplay, 0),
+		IFNULL(player_muted, 0),
+		IFNULL(player_controls, 1),
+		IFNULL(player_start_seconds, 0)
 		FROM videos
 		WHERE id = ?`
 
@@ -194,6 +238,10 @@ func renderVideoPage(db *sql.DB, w http.ResponseWriter, r *http.Request, id stri
 		&v.CTATimeSeconds,
 		&v.CTAType,
 		&v.CTAClicks,
+		&v.PlayerAutoplay,
+		&v.PlayerMuted,
+		&v.PlayerControls,
+		&v.PlayerStartSeconds,
 	)
 	if err != nil {
 		http.Redirect(w, r, "/gallery", http.StatusSeeOther)
@@ -203,6 +251,7 @@ func renderVideoPage(db *sql.DB, w http.ResponseWriter, r *http.Request, id stri
 	if thumbnail.Valid {
 		v.ThumbnailURL = thumbnail.String
 	}
+	playerOptions = resolvePlayerOptions(r, v)
 
 	var creator ProfileData
 	creatorQuery := `
@@ -784,7 +833,7 @@ func main() {
 		}
 
 		// 1. Fetch only videos belonging to THIS logged-in user
-		rows, err := db.Query("SELECT id, status, title, playlist, source_path, thumbnail_url, views, IFNULL(cta_text, ''), IFNULL(cta_url, ''), IFNULL(cta_time_seconds, 0), IFNULL(cta_type, 'button') FROM videos WHERE user_id = ? ORDER BY created_at DESC", userEmail)
+		rows, err := db.Query("SELECT id, status, title, playlist, source_path, thumbnail_url, views, IFNULL(cta_text, ''), IFNULL(cta_url, ''), IFNULL(cta_time_seconds, 0), IFNULL(cta_type, 'button'), IFNULL(player_autoplay, 0), IFNULL(player_muted, 0), IFNULL(player_controls, 1), IFNULL(player_start_seconds, 0) FROM videos WHERE user_id = ? ORDER BY created_at DESC", userEmail)
 		if err != nil {
 			log.Printf("Database Query Error: %v", err)
 			http.Error(w, "Unable to load your library", http.StatusInternalServerError)
@@ -798,7 +847,7 @@ func main() {
 			var thumb, playlist sql.NullString
 
 			// scan into NullStrings
-			err := rows.Scan(&v.ID, &v.Status, &v.Title, &playlist, &v.SourcePath, &thumb, &v.Views, &v.CTAText, &v.CTAURL, &v.CTATimeSeconds, &v.CTAType)
+			err := rows.Scan(&v.ID, &v.Status, &v.Title, &playlist, &v.SourcePath, &thumb, &v.Views, &v.CTAText, &v.CTAURL, &v.CTATimeSeconds, &v.CTAType, &v.PlayerAutoplay, &v.PlayerMuted, &v.PlayerControls, &v.PlayerStartSeconds)
 			if err != nil {
 				log.Printf("Scan error for video %s: %v", v.ID, err)
 				continue
@@ -1120,6 +1169,70 @@ func main() {
 		rowsAffected, _ := result.RowsAffected()
 		if rowsAffected == 0 {
 			log.Printf("CTA update skipped for %s: no matching video for user %s", id, userEmail)
+		}
+
+		http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+	})
+
+	http.HandleFunc("/manage-player/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+
+		userEmail := getLoggedInUser(r)
+		if userEmail == "" {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		id := filepath.Base(r.URL.Path)
+		if id == "" {
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+
+		if err := r.ParseForm(); err != nil {
+			log.Printf("Player settings form parse error for %s: %v", id, err)
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+
+		playerAutoplay := r.FormValue("player_autoplay") == "1"
+		playerMuted := r.FormValue("player_muted") == "1"
+		playerControls := r.FormValue("player_controls") == "1"
+		playerStartRaw := strings.TrimSpace(r.FormValue("player_start_seconds"))
+		playerStartSeconds := 0
+		if playerStartRaw != "" {
+			if _, err := fmt.Sscanf(playerStartRaw, "%d", &playerStartSeconds); err != nil || playerStartSeconds < 0 {
+				log.Printf("Invalid player start seconds for %s: %q", id, playerStartRaw)
+				http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+				return
+			}
+		}
+
+		if playerAutoplay {
+			playerMuted = true
+		}
+
+		result, err := db.Exec(
+			"UPDATE videos SET player_autoplay = ?, player_muted = ?, player_controls = ?, player_start_seconds = ? WHERE id = ? AND user_id = ?",
+			playerAutoplay,
+			playerMuted,
+			playerControls,
+			playerStartSeconds,
+			id,
+			userEmail,
+		)
+		if err != nil {
+			log.Printf("Player settings update error for %s: %v", id, err)
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 0 {
+			log.Printf("Player settings update skipped for %s: no matching video for user %s", id, userEmail)
 		}
 
 		http.Redirect(w, r, "/gallery", http.StatusSeeOther)

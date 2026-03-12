@@ -265,6 +265,7 @@
                                     <button onclick="window.location.href='/stats/{{.ID}}'">Stats</button>
                                     <button onclick="openThumbModal('{{.ID}}', '{{.ThumbnailURL}}')">Edit Thumbnail</button>
                                     <button onclick="openCTAModal('{{.ID}}', '{{js .CTAText}}', '{{js .CTAURL}}', '{{.CTATimeSeconds}}', '{{.CTAType}}')">CTA Manager</button>
+                                    <button data-player-autoplay="{{if .PlayerAutoplay}}true{{else}}false{{end}}" data-player-muted="{{if .PlayerMuted}}true{{else}}false{{end}}" data-player-controls="{{if .PlayerControls}}true{{else}}false{{end}}" data-player-start="{{.PlayerStartSeconds}}" onclick="openPlayerModalFromButton(this, '{{.ID}}')">Player Settings</button>
                                     {{end}}
                                     <form action="/delete/{{.ID}}" method="POST" onsubmit="return confirm('Delete video?');">
                                         <button type="submit" style="color:#e53e3e">Delete</button>
@@ -335,6 +336,53 @@
                 <div style="display:flex; gap:10px; margin-top:6px;">
                     <button type="button" onclick="clearCTAFields()" style="flex:1; background:#2a2a2a; color:#ffffff; padding:12px; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Clear CTA</button>
                     <button type="submit" style="flex:1; background:#00adef; color:white; padding:12px; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Save CTA Settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="playerModal" class="modal-overlay">
+        <div class="modal-content">
+            <button onclick="closePlayerModal()" style="position:absolute; top:10px; right:15px; border:none; background:none; font-size:24px; cursor:pointer; color:#a0aec0;">&times;</button>
+            <h2>Player Settings</h2>
+            <form id="playerForm" method="POST">
+                <div class="modal-field" style="margin-bottom:10px;">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; color:#e5e7eb;">
+                        <input id="playerAutoplayInput" type="checkbox" name="player_autoplay" value="1" style="width:auto; accent-color:#00adef;">
+                        <span>Autoplay</span>
+                    </label>
+                    <div class="modal-helper">Start the video automatically when the player loads.</div>
+                </div>
+
+                <div class="modal-field" style="margin-bottom:10px;">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; color:#e5e7eb;">
+                        <input id="playerMutedInput" type="checkbox" name="player_muted" value="1" style="width:auto; accent-color:#00adef;">
+                        <span>Start Muted</span>
+                    </label>
+                    <div class="modal-helper">Useful for autoplay videos and silent background sections.</div>
+                </div>
+
+                <div class="modal-field" style="margin-bottom:10px;">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; color:#e5e7eb;">
+                        <input id="playerControlsInput" type="checkbox" name="player_controls" value="1" style="width:auto; accent-color:#00adef;">
+                        <span>Show Controls</span>
+                    </label>
+                    <div class="modal-helper">Show or hide the player controls for this video.</div>
+                </div>
+
+                <div class="modal-field">
+                    <label for="playerStartInput">Start Video At (seconds)</label>
+                    <input id="playerStartInput" type="number" min="0" name="player_start_seconds" placeholder="0">
+                    <div class="modal-helper">Example: enter 45 to begin playback 45 seconds into the video.</div>
+                </div>
+
+                <div id="playerAutoplayNote" class="modal-helper" style="display:none; margin-bottom:12px; color:#93c5fd;">
+                    Videos that autoplay will start muted so browsers allow playback.
+                </div>
+
+                <div style="display:flex; gap:10px; margin-top:6px;">
+                    <button type="button" onclick="resetPlayerFields()" style="flex:1; background:#2a2a2a; color:#ffffff; padding:12px; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Reset Defaults</button>
+                    <button type="submit" style="flex:1; background:#00adef; color:white; padding:12px; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Save Player Settings</button>
                 </div>
             </form>
         </div>
@@ -545,12 +593,61 @@
             document.getElementById('ctaModal').style.display = 'none';
         }
 
+        function openPlayerModalFromButton(button, id) {
+            const autoplay = button.dataset.playerAutoplay === 'true';
+            const muted = button.dataset.playerMuted === 'true';
+            const controls = button.dataset.playerControls !== 'false';
+            const startSeconds = button.dataset.playerStart || '';
+
+            document.getElementById('playerModal').style.display = 'flex';
+            document.getElementById('playerForm').action = `/manage-player/${id}`;
+            document.getElementById('playerAutoplayInput').checked = autoplay;
+            document.getElementById('playerMutedInput').checked = muted;
+            document.getElementById('playerControlsInput').checked = controls;
+            document.getElementById('playerStartInput').value = startSeconds && startSeconds !== '0' ? startSeconds : '';
+            syncPlayerAutoplayState();
+        }
+
+        function closePlayerModal() {
+            document.getElementById('playerModal').style.display = 'none';
+        }
+
+        function resetPlayerFields() {
+            document.getElementById('playerAutoplayInput').checked = false;
+            document.getElementById('playerMutedInput').checked = false;
+            document.getElementById('playerControlsInput').checked = true;
+            document.getElementById('playerStartInput').value = '';
+            syncPlayerAutoplayState();
+        }
+
+        function syncPlayerAutoplayState() {
+            const autoplayInput = document.getElementById('playerAutoplayInput');
+            const mutedInput = document.getElementById('playerMutedInput');
+            const autoplayNote = document.getElementById('playerAutoplayNote');
+            if (!autoplayInput || !mutedInput || !autoplayNote) return;
+
+            if (autoplayInput.checked) {
+                mutedInput.checked = true;
+                mutedInput.disabled = true;
+                autoplayNote.style.display = 'block';
+            } else {
+                mutedInput.disabled = false;
+                autoplayNote.style.display = 'none';
+            }
+        }
+
         function clearCTAFields() {
             document.getElementById('ctaTextInput').value = '';
             document.getElementById('ctaUrlInput').value = '';
             document.getElementById('ctaTimeInput').value = '';
             document.getElementById('ctaTypeInput').value = 'button';
         }
+        document.addEventListener('DOMContentLoaded', () => {
+            const autoplayInput = document.getElementById('playerAutoplayInput');
+            if (autoplayInput) {
+                autoplayInput.addEventListener('change', syncPlayerAutoplayState);
+            }
+        });
     </script>
 </body>
 </html>
