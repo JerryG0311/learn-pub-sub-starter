@@ -575,9 +575,9 @@
         {{end}}
 
         {{if .IsEmbed}}
-        <div class="video-stage is-embed-stage" data-cta-seconds="{{.Video.CTATimeSeconds}}" data-cta-type="{{.Video.CTAType}}">
+        <div class="video-stage is-embed-stage" data-cta-seconds="{{.Video.CTATimeSeconds}}" data-cta-type="{{.Video.CTAType}}" data-start-seconds="{{.PlayerOptions.StartSeconds}}" data-autoplay="{{.PlayerOptions.Autoplay}}" data-muted="{{.PlayerOptions.Muted}}" data-controls="{{.PlayerOptions.Controls}}">
             <div class="main-play-badge"></div>
-            <video controls autoplay poster="{{.Video.ThumbnailURL}}" class="is-embed-video">
+            <video {{if .PlayerOptions.Controls}}controls{{end}} {{if .PlayerOptions.Autoplay}}autoplay{{end}} {{if .PlayerOptions.Muted}}muted{{end}} playsinline poster="{{.Video.ThumbnailURL}}" class="is-embed-video">
                 <source src="{{.Video.SourcePath}}" type="video/mp4">
             </video>
             {{if and .Video.CTAText .Video.CTAURL}}
@@ -615,9 +615,9 @@
         {{else}}
         <div class="watch-layout">
             <div class="main-column">
-                <div class="video-stage" data-cta-seconds="{{.Video.CTATimeSeconds}}" data-cta-type="{{.Video.CTAType}}">
+                <div class="video-stage" data-cta-seconds="{{.Video.CTATimeSeconds}}" data-cta-type="{{.Video.CTAType}}" data-start-seconds="{{.PlayerOptions.StartSeconds}}" data-autoplay="{{.PlayerOptions.Autoplay}}" data-muted="{{.PlayerOptions.Muted}}" data-controls="{{.PlayerOptions.Controls}}">
                     <div class="main-play-badge"></div>
-                    <video controls poster="{{.Video.ThumbnailURL}}">
+                    <video {{if .PlayerOptions.Controls}}controls{{end}} {{if .PlayerOptions.Autoplay}}autoplay{{end}} {{if .PlayerOptions.Muted}}muted{{end}} playsinline poster="{{.Video.ThumbnailURL}}">
                         <source src="{{.Video.SourcePath}}" type="video/mp4">
                     </video>
                     {{if and .Video.CTAText .Video.CTAURL}}
@@ -813,9 +813,28 @@
             const playBadge = stage.querySelector('.main-play-badge');
             const ctaOverlay = stage.querySelector('.video-cta-overlay');
             const ctaSeconds = Number(stage.dataset.ctaSeconds || 0);
+            const startSeconds = Number(stage.dataset.startSeconds || 0);
+            const shouldAutoplay = stage.dataset.autoplay === 'true';
+            const shouldMute = stage.dataset.muted === 'true';
+            const shouldShowControls = stage.dataset.controls !== 'false';
             const isEmailGate = stage.dataset.ctaType === 'email_gate';
             const isGateUnlocked = () => stage.dataset.gateUnlocked === 'true';
             if (!video) return;
+
+            video.muted = shouldMute;
+            video.controls = shouldShowControls;
+
+            const applyStartTime = () => {
+                if (startSeconds > 0 && !Number.isNaN(startSeconds)) {
+                    try {
+                        video.currentTime = startSeconds;
+                    } catch (error) {
+                        // Ignore seek timing issues until metadata is ready
+                    }
+                }
+            };
+
+            video.addEventListener('loadedmetadata', applyStartTime, { once: true });
 
             const syncPlayState = () => {
                 if (video.paused || video.ended) {
@@ -892,6 +911,8 @@
 
             if (isEmailGate && !isGateUnlocked()) {
                 video.pause();
+            } else if (shouldAutoplay) {
+                video.play().catch(() => {});
             }
 
             syncPlayState();

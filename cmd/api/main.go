@@ -73,11 +73,19 @@ type CreatorPageData struct {
 	Videos  []VideoData
 }
 
+type PlayerOptions struct {
+	Autoplay     bool
+	Muted        bool
+	Controls     bool
+	StartSeconds int
+}
+
 type ViewPageData struct {
 	Video         VideoData
 	Creator       ProfileData
 	RelatedVideos []VideoData
 	IsEmbed       bool
+	PlayerOptions PlayerOptions
 }
 
 type LeadData struct {
@@ -96,12 +104,53 @@ type StatsPageData struct {
 	Leads         []LeadData
 }
 
+func parsePlayerOptions(r *http.Request) PlayerOptions {
+	options := PlayerOptions{
+		Autoplay:     false,
+		Muted:        false,
+		Controls:     true,
+		StartSeconds: 0,
+	}
+
+	query := r.URL.Query()
+
+	autoplayRaw := strings.TrimSpace(strings.ToLower(query.Get("autoplay")))
+	if autoplayRaw == "1" || autoplayRaw == "true" || autoplayRaw == "yes" {
+		options.Autoplay = true
+	}
+
+	mutedRaw := strings.TrimSpace(strings.ToLower(query.Get("muted")))
+	if mutedRaw == "1" || mutedRaw == "true" || mutedRaw == "yes" {
+		options.Muted = true
+	}
+
+	controlsRaw := strings.TrimSpace(strings.ToLower(query.Get("controls")))
+	if controlsRaw == "0" || controlsRaw == "false" || controlsRaw == "no" {
+		options.Controls = false
+	}
+
+	startRaw := strings.TrimSpace(query.Get("start"))
+	if startRaw != "" {
+		var parsedStart int
+		if _, err := fmt.Sscanf(startRaw, "%d", &parsedStart); err == nil && parsedStart >= 0 {
+			options.StartSeconds = parsedStart
+		}
+	}
+
+	if options.Autoplay {
+		options.Muted = true
+	}
+
+	return options
+}
+
 func renderVideoPage(db *sql.DB, w http.ResponseWriter, r *http.Request, id string, isEmbed bool) {
 	if id == "" {
 		http.Redirect(w, r, "/gallery", http.StatusSeeOther)
 		return
 	}
 
+	playerOptions := parsePlayerOptions(r)
 	if !isEmbed {
 		db.Exec("UPDATE videos SET views = views + 1 WHERE id = ?", id)
 	}
@@ -236,6 +285,7 @@ func renderVideoPage(db *sql.DB, w http.ResponseWriter, r *http.Request, id stri
 		Creator:       creator,
 		RelatedVideos: relatedVideos,
 		IsEmbed:       isEmbed,
+		PlayerOptions: playerOptions,
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
