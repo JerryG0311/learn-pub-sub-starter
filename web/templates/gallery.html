@@ -189,6 +189,25 @@
             line-height: 1.45;
             margin-top: 4px;
         }
+        .tab-btn {
+            border: none;
+            background: none;
+            padding: 10px 14px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: #9ca3af;
+        }
+
+        .tab-btn.active {
+            color: #00adef;
+            border-bottom-color: #00adef;
+        }
+
+        .tab-btn.inactive {
+            color: #9ca3af;
+        }
     </style>
 </head>
 <body class="list-view">
@@ -330,7 +349,25 @@
                 <a id="shareFB" target="_blank" style="color:#1877F2;"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
                 <a id="shareLI" target="_blank" style="color:#0077b5;"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg></a>
             </div>
-            <input type="text" id="shareUrlInput" readonly style="width: 100%; padding: 10px; border: 1px solid #282828; border-radius: 8px; text-align: center; background:#101010; color:#ffffff; font-size: 0.85em; box-sizing:border-box;">
+
+            <div style="display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 1px solid #282828; gap: 8px; flex-wrap: wrap;">
+                <button onclick="switchTab('link')" id="linkTabBtn" class="tab-btn active">Share Link</button>
+                <button onclick="switchTab('embed')" id="embedTabBtn" class="tab-btn inactive">Embed Code</button>
+                <button onclick="switchTab('player')" id="playerTabBtn" class="tab-btn inactive">Player Link</button>
+            </div>
+
+            <div id="linkSection">
+                <input type="text" id="shareUrlInput" readonly style="width: 100%; padding: 10px; border: 1px solid #282828; border-radius: 8px; text-align: center; background:#101010; color:#ffffff; font-size: 0.85em; box-sizing:border-box;">
+            </div>
+
+            <div id="embedSection" style="display:none;">
+                <textarea id="embedCodeInput" readonly style="width: 100%; height: 100px; padding: 10px; border: 1px solid #282828; border-radius: 8px; font-family: monospace; font-size: 0.85em; resize: none; box-sizing: border-box; background:#101010; color:#ffffff;"></textarea>
+            </div>
+
+            <div id="playerSection" style="display:none;">
+                <input type="text" id="playerLinkInput" readonly style="width: 100%; padding: 10px; border: 1px solid #282828; border-radius: 8px; text-align: center; box-sizing: border-box; background:#101010; color:#ffffff; font-size: 0.85em;">
+            </div>
+
             <button id="copyBtn" onclick="copyShareToClipboard()" style="width:100%; background: #00adef; margin-top: 20px; padding: 10px; font-weight: 700; color: white; border: none; border-radius: 8px; cursor: pointer;">Copy to Clipboard</button>
         </div>
     </div>
@@ -402,6 +439,7 @@
         window.onclick = function() { document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none'); }
 
         let currentShareVideoId = '';
+        let currentTab = 'link';
 
         function sendAnalyticsPing(endpoint, id) {
             if (!id) return Promise.resolve();
@@ -433,13 +471,20 @@
         }
 
         function openShareModal(title, id) {
-            const videoUrl = `${window.location.origin}/view/${id}`;
+            const origin = window.location.origin;
+            const shareUrl = `${origin}/view/${id}`;
+            const playerUrl = `${origin}/player/${id}`;
+            const embedCode = `<iframe src="${playerUrl}" width="100%" height="600" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+
             currentShareVideoId = id;
             document.getElementById('shareModal').style.display = 'flex';
-            document.getElementById('shareUrlInput').value = videoUrl;
-            const xUrl = `https://x.com/intent/tweet?url=${encodeURIComponent(videoUrl)}&text=${encodeURIComponent(title)}`;
-            const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(videoUrl)}`;
-            const liUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(videoUrl)}`;
+            document.getElementById('shareUrlInput').value = shareUrl;
+            document.getElementById('embedCodeInput').value = embedCode;
+            document.getElementById('playerLinkInput').value = playerUrl;
+
+            const xUrl = `https://x.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(title)}`;
+            const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+            const liUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
 
             document.getElementById('shareX').href = xUrl;
             document.getElementById('shareFB').href = fbUrl;
@@ -448,15 +493,34 @@
             document.getElementById('shareX').onclick = (event) => handleShareLinkClick(event, xUrl);
             document.getElementById('shareFB').onclick = (event) => handleShareLinkClick(event, fbUrl);
             document.getElementById('shareLI').onclick = (event) => handleShareLinkClick(event, liUrl);
+
+            switchTab('link');
         }
         function closeModal() { document.getElementById('shareModal').style.display = 'none'; }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.getElementById('linkSection').style.display = tab === 'link' ? 'block' : 'none';
+            document.getElementById('embedSection').style.display = tab === 'embed' ? 'block' : 'none';
+            document.getElementById('playerSection').style.display = tab === 'player' ? 'block' : 'none';
+
+            document.getElementById('linkTabBtn').className = tab === 'link' ? 'tab-btn active' : 'tab-btn inactive';
+            document.getElementById('embedTabBtn').className = tab === 'embed' ? 'tab-btn active' : 'tab-btn inactive';
+            document.getElementById('playerTabBtn').className = tab === 'player' ? 'tab-btn active' : 'tab-btn inactive';
+        }
         
         function copyShareToClipboard() {
-            const input = document.getElementById('shareUrlInput');
-            input.select();
-            navigator.clipboard.writeText(input.value);
+            const inputId = currentTab === 'link'
+                ? 'shareUrlInput'
+                : currentTab === 'embed'
+                    ? 'embedCodeInput'
+                    : 'playerLinkInput';
+            
+            const copyText = document.getElementById(inputId);
+            navigator.clipboard.writeText(copyText.value);
             sendAnalyticsPing('share-click', currentShareVideoId);
-            document.getElementById('copyBtn').innerText = "Copied!";
+
+            document.getElementById('copyBtn').innerText = "copied!";
             setTimeout(() => { document.getElementById('copyBtn').innerText = "Copy to Clipboard"; }, 2000);
         }
 

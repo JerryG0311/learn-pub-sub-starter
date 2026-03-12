@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -217,6 +215,30 @@
             text-decoration: underline;
         }
 
+        .export-btn {
+            background: #00adef;
+            color: #ffffff;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .export-btn:hover {
+            background: #0095cc;
+        }
+
+        .leads-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
         .empty-state {
             color: #6b7280;
         }
@@ -228,6 +250,10 @@
 
             .metrics-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .metric-card.leads-card {
+                grid-column: auto;
             }
 
             .details-grid {
@@ -269,7 +295,7 @@
             <div class="meta-card">
                 <div class="eyebrow">Video Analytics</div>
                 <h1>{{.Video.Title}}</h1>
-                <p class="subtitle">Track how this video is performing across views, CTA engagement, downloads, and shares. This is the foundation for a proper Vimeo-style stats dashboard.</p>
+                <p class="subtitle">See how your video is performing, including views, clicks, downloads, shares, and leads captured from this video.</p>
             </div>
         </div>
 
@@ -277,25 +303,31 @@
             <div class="metric-card">
                 <div class="metric-label">Views</div>
                 <div class="metric-value">{{.Video.Views}}</div>
-                <div class="metric-subtext">Total watch page views recorded for this video.</div>
+                <div class="metric-subtext">How many times this video page has been viewed.</div>
             </div>
 
             <div class="metric-card">
                 <div class="metric-label">CTA Clicks</div>
                 <div class="metric-value">{{.Video.CTAClicks}}</div>
-                <div class="metric-subtext">How many viewers clicked your CTA overlay button.</div>
+                <div class="metric-subtext">How many people clicked the call-to-action on this video.</div>
             </div>
 
             <div class="metric-card">
                 <div class="metric-label">CTA CTR</div>
                 <div class="metric-value">{{printf "%.1f" .CTR}}%</div>
-                <div class="metric-subtext">CTA clicks divided by total views.</div>
+                <div class="metric-subtext">The percentage of viewers who clicked your call-to-action.</div>
             </div>
 
             <div class="metric-card">
                 <div class="metric-label">Downloads</div>
                 <div class="metric-value">{{.DownloadCount}}</div>
-                <div class="metric-subtext">Download tracking placeholder for the next analytics pass.</div>
+                <div class="metric-subtext">How many times people downloaded this video.</div>
+            </div>
+
+            <div class="metric-card leads-card">
+                <div class="metric-label">Leads</div>
+                <div class="metric-value">{{.LeadCount}}</div>
+                <div class="metric-subtext">People who shared their contact details through this video.</div>
             </div>
         </div>
 
@@ -308,18 +340,28 @@
                         <div class="detail-value">{{if .Video.CTAText}}{{.Video.CTAText}}{{else}}<span class="empty-state">No CTA configured</span>{{end}}</div>
                     </div>
                     <div class="detail-row">
-                        <div class="detail-key">CTA URL</div>
+                        <div class="detail-key">Destination</div>
                         <div class="detail-value">
-                            {{if .Video.CTAURL}}
+                            {{if eq .Video.CTAURL "__email_capture__"}}
+                                Email capture form
+                            {{else if .Video.CTAURL}}
                                 <a class="cta-link" href="{{.Video.CTAURL}}" target="_blank" rel="noopener noreferrer">{{.Video.CTAURL}}</a>
                             {{else}}
-                                <span class="empty-state">No CTA URL configured</span>
+                                <span class="empty-state">No destination configured</span>
                             {{end}}
                         </div>
                     </div>
                     <div class="detail-row">
-                        <div class="detail-key">CTA Trigger Time</div>
-                        <div class="detail-value">{{if gt .Video.CTATimeSeconds 0}}{{.Video.CTATimeSeconds}} seconds{{else}}<span class="empty-state">CTA disabled</span>{{end}}</div>
+                        <div class="detail-key">When it appears</div>
+                        <div class="detail-value">
+                            {{if eq .Video.CTAURL "__email_capture__"}}
+                                Before the video starts
+                            {{else if gt .Video.CTATimeSeconds 0}}
+                                After {{.Video.CTATimeSeconds}} seconds
+                            {{else}}
+                                <span class="empty-state">Not configured</span>
+                            {{end}}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -345,6 +387,38 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div class="details-card" style="margin-top:16px;">
+            <div class="leads-header">
+                <h2 class="section-title" style="margin:0;">Captured Leads</h2>
+                <a class="export-btn" href="/stats/{{.Video.ID}}/export">Export CSV</a>
+            </div>
+
+            {{if .Leads}}
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; color:#ffffff;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #2a2a2a; text-align:left;">
+                            <th style="padding:12px 10px;">Name</th>
+                            <th style="padding:12px 10px;">Email</th>
+                            <th style="padding:12px 10px;">Captured</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Leads}}
+                        <tr style="border-bottom:1px solid #242424;">
+                            <td style="padding:12px 10px; color:#f3f4f6;">{{if .Name}}{{.Name}}{{else}}—{{end}}</td>
+                            <td style="padding:12px 10px; color:#cbd5e1;">{{.Email}}</td>
+                            <td style="padding:12px 10px; color:#9ca3af;">{{.CreatedAt.Format "Jan 02, 2006 3:04 PM"}}</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <div class="empty-state">No leads captured for this video yet.</div>
+            {{end}}
         </div>
     </div>
 </body>

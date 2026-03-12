@@ -114,7 +114,7 @@
             border-radius: 14px;
             padding: 12px;
             box-shadow: 0 18px 40px rgba(0,0,0,0.35);
-            z-index: 3;
+            z-index: 4;
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.2s ease, transform 0.2s ease;
@@ -138,6 +138,16 @@
             pointer-events: none;
         }
 
+        .video-stage.is-gated::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 2;
+        }
+
         .video-stage.is-gated video {
             pointer-events: none;
         }
@@ -149,6 +159,13 @@
             top: 50%;
             bottom: auto;
             transform: translate(-50%, -50%);
+            width: min(92%, 560px);
+            max-width: 560px;
+            background: rgba(17, 17, 17, 0.92);
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 26px 60px rgba(0,0,0,0.45);
+            padding: 20px;
+            border-radius: 18px;
         }
 
         .video-stage.is-gated .main-play-badge {
@@ -209,13 +226,46 @@
             margin: 0 auto;
         }
 
+        .video-lead-form.is-gate-layout .video-cta-content {
+            gap: 16px;
+        }
+
+        .video-lead-form.is-gate-layout .video-cta-copy {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .video-lead-form.is-gate-layout .video-cta-copy::before {
+            content: 'Unlock This Video';
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #7dd3fc;
+        }
+
         .video-lead-form.is-gate-layout .video-cta-copy {
             text-align: center;
             width: 100%;
         }
 
         .video-lead-form.is-gate-layout .video-cta-text {
-            font-size: 17px;
+            font-size: 22px;
+            line-height: 1.25;
+            font-weight: 700;
+            max-width: 420px;
+            margin: 0 auto;
+        }
+
+        .video-lead-form.is-gate-layout .video-cta-subtext {
+            color: #cbd5e1;
+            font-size: 14px;
+            line-height: 1.5;
+            text-align: center;
+            max-width: 420px;
+            margin: 0 auto;
         }
 
         .video-lead-form.is-gate-layout .video-lead-fields {
@@ -234,8 +284,10 @@
 
         .video-lead-form.is-gate-layout .video-cta-button {
             width: 100%;
-            padding: 13px 16px;
+            padding: 14px 18px;
             font-size: 15px;
+            border-radius: 12px;
+            margin-top: 2px;
         }
 
         @media (max-width: 640px) {
@@ -535,6 +587,9 @@
                     <div class="video-cta-content" style="align-items:flex-end;">
                         <div class="video-cta-copy" style="flex:1;">
                             <div class="video-cta-text">{{.Video.CTAText}}</div>
+                            {{if eq .Video.CTAType "email_gate"}}
+                            <div class="video-cta-subtext">Enter your name and email below to unlock the full video.</div>
+                            {{end}}
                         </div>
                         <div class="video-lead-fields" style="flex:1; width:100%;">
                             {{if eq .Video.CTAType "email_gate"}}
@@ -572,6 +627,9 @@
                             <div class="video-cta-content" style="align-items:flex-end;">
                                 <div class="video-cta-copy" style="flex:1;">
                                     <div class="video-cta-text">{{.Video.CTAText}}</div>
+                                    {{if eq .Video.CTAType "email_gate"}}
+                                    <div class="video-cta-subtext">Enter your name and email below to unlock the full video.</div>
+                                    {{end}}
                                 </div>
                                 <div class="video-lead-fields" style="flex:1; width:100%;">
                                     {{if eq .Video.CTAType "email_gate"}}
@@ -661,9 +719,10 @@
     <div id="shareModal" class="modal-overlay">
         <div class="modal-content">
             <h2 style="margin-top:0; font-size: 1.2em;">Share Video</h2>
-            <div style="display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 1px solid #eee;">
-                <button onclick="switchTab('link')" id="linkTabBtn" class="tab-btn active">Direct Link</button>
+            <div style="display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 1px solid #eee; gap: 8px; flex-wrap: wrap;">
+                <button onclick="switchTab('link')" id="linkTabBtn" class="tab-btn active">Share Link</button>
                 <button onclick="switchTab('embed')" id="embedTabBtn" class="tab-btn inactive">Embed Code</button>
+                <button onclick="switchTab('player')" id="playerTabBtn" class="tab-btn inactive">Player Link</button>
             </div>
             <div id="linkSection">
                 <div style="margin-bottom: 20px; display: flex; gap: 10px; justify-content: center;">
@@ -675,6 +734,9 @@
             <div id="embedSection" style="display:none;">
                 <textarea id="embedCodeInput" readonly style="width: 100%; height: 100px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.85em; resize: none; box-sizing: border-box;"></textarea>
             </div>
+            <div id="playerSection" style="display:none;">
+                <input type="text" id="playerLinkInput" readonly style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-align: center; box-sizing: border-box;">
+            </div>
             <div style="margin-top: 25px; display: flex; gap: 10px;">
                 <button id="copyBtn" onclick="copyToClipboard()" class="btn" style="flex:2; background: #00adef;">Copy to Clipboard</button>
                 <button onclick="closeModal()" class="btn" style="flex:1; background: #eee; color: #333;">Close</button>
@@ -685,28 +747,36 @@
     <script>
         let currentTab = 'link';
         function openShareModal(title) {
-            const url = window.location.href.split('?')[0];
-            const embedUrl = `${url}?embed=true`;
-            const embedCode = `<iframe src="${embedUrl}" width="640" height="360" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+            const origin = window.location.origin;
+            const shareUrl = `${origin}/view/${currentVideoId}`;
+            const playerUrl = `${origin}/player/${currentVideoId}`;
+            const embedCode = `<iframe src="${playerUrl}" width="100%" height="600" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
             document.getElementById('shareModal').style.display = 'flex';
-            document.getElementById('shareUrlInput').value = url;
+            document.getElementById('shareUrlInput').value = shareUrl;
             document.getElementById('embedCodeInput').value = embedCode;
-            document.getElementById('shareX').href = `https://twitter.com/intent/tweet?text=Check out ${title}&url=${url}`;
-            document.getElementById('shareLI').href = `https://www.linkedin.com/sharing/share-offsite/?url=${url}`;
+            document.getElementById('playerLinkInput').value = playerUrl;
+            document.getElementById('shareX').href = `https://twitter.com/intent/tweet?text=Check out ${encodeURIComponent(title)}&url=${encodeURIComponent(shareUrl)}`;
+            document.getElementById('shareLI').href = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
             document.getElementById('shareX').onclick = () => sendAnalyticsPing('share-click', currentVideoId);
             document.getElementById('shareLI').onclick = () => sendAnalyticsPing('share-click', currentVideoId);
+            switchTab('link');
         }
         function switchTab(tab) {
             currentTab = tab;
             document.getElementById('linkSection').style.display = tab === 'link' ? 'block' : 'none';
             document.getElementById('embedSection').style.display = tab === 'embed' ? 'block' : 'none';
+            document.getElementById('playerSection').style.display = tab === 'player' ? 'block' : 'none';
             document.getElementById('linkTabBtn').className = tab === 'link' ? 'tab-btn active' : 'tab-btn inactive';
             document.getElementById('embedTabBtn').className = tab === 'embed' ? 'tab-btn active' : 'tab-btn inactive';
+            document.getElementById('playerTabBtn').className = tab === 'player' ? 'tab-btn active' : 'tab-btn inactive';
         }
         function copyToClipboard() {
-            const inputId = currentTab === 'link' ? 'shareUrlInput' : 'embedCodeInput';
+            const inputId = currentTab === 'link'
+                ? 'shareUrlInput'
+                : currentTab === 'embed'
+                    ? 'embedCodeInput'
+                    : 'playerLinkInput';
             const copyText = document.getElementById(inputId);
-            copyText.select();
             navigator.clipboard.writeText(copyText.value);
             sendAnalyticsPing('share-click', currentVideoId);
             const btn = document.getElementById('copyBtn');

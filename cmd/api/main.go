@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -79,12 +80,167 @@ type ViewPageData struct {
 	IsEmbed       bool
 }
 
+type LeadData struct {
+	Name      string
+	Email     string
+	CreatedAt time.Time
+}
+
 type StatsPageData struct {
 	Video         VideoData
 	UserEmail     string
 	ShareCount    int
 	DownloadCount int
 	CTR           float64
+	LeadCount     int
+	Leads         []LeadData
+}
+
+func renderVideoPage(db *sql.DB, w http.ResponseWriter, r *http.Request, id string, isEmbed bool) {
+	if id == "" {
+		http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+		return
+	}
+
+	if !isEmbed {
+		db.Exec("UPDATE videos SET views = views + 1 WHERE id = ?", id)
+	}
+
+	var v VideoData
+	var thumbnail sql.NullString
+
+	query := `
+		SELECT 
+		id, 
+		user_id, 
+		title, 
+		description, 
+		playlist, 
+		source_path, 
+		thumbnail_url, 
+		views, 
+		created_at, 
+		status, 
+		IFNULL(cta_text, ''), 
+		IFNULL(cta_url, ''), 
+		IFNULL(cta_time_seconds, 0), 
+		IFNULL(cta_type, 'button'),
+		IFNULL(cta_clicks, 0)
+		FROM videos
+		WHERE id = ?`
+
+	err := db.QueryRow(query, id).Scan(
+		&v.ID,
+		&v.UserID,
+		&v.Title,
+		&v.Description,
+		&v.Playlist,
+		&v.SourcePath,
+		&thumbnail,
+		&v.Views,
+		&v.CreatedAt,
+		&v.Status,
+		&v.CTAText,
+		&v.CTAURL,
+		&v.CTATimeSeconds,
+		&v.CTAType,
+		&v.CTAClicks,
+	)
+	if err != nil {
+		http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+		return
+	}
+
+	if thumbnail.Valid {
+		v.ThumbnailURL = thumbnail.String
+	}
+
+	var creator ProfileData
+	creatorQuery := `
+		SELECT
+			email,
+			IFNULL(display_name, ''),
+			IFNULL(username, ''),
+			IFNULL(bio, ''),
+			IFNULL(website, ''),
+			IFNULL(instagram, ''),
+			IFNULL(profile_picture_url, '')
+		FROM users
+		WHERE email = ?`
+
+	err = db.QueryRow(creatorQuery, v.UserID).Scan(
+		&creator.Email,
+		&creator.DisplayName,
+		&creator.Username,
+		&creator.Bio,
+		&creator.Website,
+		&creator.Instagram,
+		&creator.ProfilePictureURL,
+	)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("Creator lookup error for video %s: %v", v.ID, err)
+	}
+
+	var relatedVideos []VideoData
+	relatedRows, err := db.Query(`
+		SELECT id, user_id, title, description, playlist, source_path, thumbnail_url, views, created_at, status
+		FROM videos
+		WHERE user_id = ? AND id != ?
+		ORDER BY created_at DESC
+		LIMIT 6`, v.UserID, v.ID)
+	if err == nil {
+		defer relatedRows.Close()
+
+		for relatedRows.Next() {
+			var rv VideoData
+			var relatedPlaylist, relatedThumb sql.NullString
+
+			if err := relatedRows.Scan(
+				&rv.ID,
+				&rv.UserID,
+				&rv.Title,
+				&rv.Description,
+				&relatedPlaylist,
+				&rv.SourcePath,
+				&relatedThumb,
+				&rv.Views,
+				&rv.CreatedAt,
+				&rv.Status,
+			); err != nil {
+				log.Printf("Related video scan error for %s: %v", v.ID, err)
+				continue
+			}
+
+			if relatedPlaylist.Valid {
+				rv.Playlist = relatedPlaylist.String
+			}
+			if relatedThumb.Valid {
+				rv.ThumbnailURL = relatedThumb.String
+			}
+
+			relatedVideos = append(relatedVideos, rv)
+		}
+	} else {
+		log.Printf("Related videos query error for %s: %v", v.ID, err)
+	}
+
+	tmpl, err := template.ParseFiles("web/templates/view.html")
+	if err != nil {
+		log.Printf("View template error: %v", err)
+		http.Error(w, "View template not found", http.StatusInternalServerError)
+		return
+	}
+
+	data := ViewPageData{
+		Video:         v,
+		Creator:       creator,
+		RelatedVideos: relatedVideos,
+		IsEmbed:       isEmbed,
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("View template execution error: %v", err)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
@@ -745,146 +901,52 @@ func main() {
 	http.HandleFunc("/view/", func(w http.ResponseWriter, r *http.Request) {
 		id := filepath.Base(r.URL.Path)
 		isEmbed := r.URL.Query().Get("embed") == "true"
+		renderVideoPage(db, w, r, id, isEmbed)
+	})
 
-		if !isEmbed {
-			db.Exec("UPDATE videos SET views = views + 1 WHERE id = ?", id)
-		}
+	http.HandleFunc("/player/", func(w http.ResponseWriter, r *http.Request) {
+		id := filepath.Base(r.URL.Path)
+		renderVideoPage(db, w, r, id, true)
+	})
 
-		var v VideoData
-		var thumbnail sql.NullString
-
-		query := `
-			SELECT 
-			id, 
-			user_id, 
-			title, 
-			description, 
-			playlist, 
-			source_path, 
-			thumbnail_url, 
-			views, 
-			created_at, 
-			status, 
-			IFNULL(cta_text, ''), 
-			IFNULL(cta_url, ''), 
-			IFNULL(cta_time_seconds, 0), 
-			IFNULL(cta_type, 'button'),
-			IFNULL(cta_clicks, 0)
-			FROM videos
-			WHERE id = ?`
-
-		err := db.QueryRow(query, id).Scan(
-			&v.ID,
-			&v.UserID,
-			&v.Title,
-			&v.Description,
-			&v.Playlist,
-			&v.SourcePath,
-			&thumbnail,
-			&v.Views,
-			&v.CreatedAt,
-			&v.Status,
-			&v.CTAText,
-			&v.CTAURL,
-			&v.CTATimeSeconds,
-			&v.CTAType,
-			&v.CTAClicks,
-		)
-		if err != nil {
+	http.HandleFunc("/embed/", func(w http.ResponseWriter, r *http.Request) {
+		id := filepath.Base(r.URL.Path)
+		if id == "" {
 			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
 			return
 		}
 
-		if thumbnail.Valid {
-			v.ThumbnailURL = thumbnail.String
-		}
+		http.Redirect(w, r, "/player/"+id, http.StatusSeeOther)
+	})
 
-		var creator ProfileData
-		creatorQuery := `
-			SELECT
-				email,
-				IFNULL(display_name, ''),
-				IFNULL(username, ''),
-				IFNULL(bio, ''),
-				IFNULL(website, ''),
-				IFNULL(instagram, ''),
-				IFNULL(profile_picture_url, '')
-			FROM users
-			WHERE email = ?`
-
-		err = db.QueryRow(creatorQuery, v.UserID).Scan(
-			&creator.Email,
-			&creator.DisplayName,
-			&creator.Username,
-			&creator.Bio,
-			&creator.Website,
-			&creator.Instagram,
-			&creator.ProfilePictureURL,
-		)
-		if err != nil && err != sql.ErrNoRows {
-			log.Printf("Creator lookup error for video %s: %v", v.ID, err)
-		}
-
-		var relatedVideos []VideoData
-		relatedRows, err := db.Query(`
-			SELECT id, user_id, title, description, playlist, source_path, thumbnail_url, views, created_at, status
-			FROM videos
-			WHERE user_id = ? AND id != ?
-			ORDER BY created_at DESC
-			LIMIT 6`, v.UserID, v.ID)
-		if err == nil {
-			defer relatedRows.Close()
-
-			for relatedRows.Next() {
-				var rv VideoData
-				var relatedPlaylist, relatedThumb sql.NullString
-
-				if err := relatedRows.Scan(
-					&rv.ID,
-					&rv.UserID,
-					&rv.Title,
-					&rv.Description,
-					&relatedPlaylist,
-					&rv.SourcePath,
-					&relatedThumb,
-					&rv.Views,
-					&rv.CreatedAt,
-					&rv.Status,
-				); err != nil {
-					log.Printf("Related video scan error for %s: %v", v.ID, err)
-					continue
-				}
-
-				if relatedPlaylist.Valid {
-					rv.Playlist = relatedPlaylist.String
-				}
-				if relatedThumb.Valid {
-					rv.ThumbnailURL = relatedThumb.String
-				}
-
-				relatedVideos = append(relatedVideos, rv)
-			}
-		} else {
-			log.Printf("Related videos query error for %s: %v", v.ID, err)
-		}
-
-		tmpl, err := template.ParseFiles("web/templates/view.html")
-		if err != nil {
-			log.Printf("View template error: %v", err)
-			http.Error(w, "View template not found", http.StatusInternalServerError)
+	// Secure proxy endpoint for direct video access without exposing S3 URL
+	http.HandleFunc("/video-file/", func(w http.ResponseWriter, r *http.Request) {
+		id := filepath.Base(r.URL.Path)
+		if id == "" {
+			http.Error(w, "missing video id", http.StatusBadRequest)
 			return
 		}
 
-		data := ViewPageData{
-			Video:         v,
-			Creator:       creator,
-			RelatedVideos: relatedVideos,
-			IsEmbed:       isEmbed,
+		var sourcePath string
+		err := db.QueryRow("SELECT source_path FROM videos WHERE id = ?", id).Scan(&sourcePath)
+		if err != nil {
+			http.Error(w, "video not found", http.StatusNotFound)
+			return
 		}
 
-		if err := tmpl.Execute(w, data); err != nil {
-			log.Printf("View template execution error: %v", err)
+		// Fetch the video from storage (S3) server-side so the client never sees the bucket URL
+		resp, err := http.Get(sourcePath)
+		if err != nil {
+			log.Printf("Video proxy fetch error for %s: %v", id, err)
+			http.Error(w, "unable to load video", http.StatusInternalServerError)
+			return
 		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", "video/mp4")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+
+		io.Copy(w, resp.Body)
 	})
 
 	http.HandleFunc("/delete/", func(w http.ResponseWriter, r *http.Request) {
@@ -1115,7 +1177,13 @@ func main() {
 			return
 		}
 
-		id := filepath.Base(r.URL.Path)
+		path := strings.TrimPrefix(r.URL.Path, "/stats/")
+		isExport := strings.HasSuffix(path, "/export")
+		id := strings.Trim(path, "/")
+		if isExport {
+			id = strings.TrimSuffix(id, "/export")
+			id = strings.Trim(id, "/")
+		}
 		if id == "" {
 			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
 			return
@@ -1187,6 +1255,52 @@ func main() {
 			ctr = (float64(v.CTAClicks) / float64(v.Views)) * 100
 		}
 
+		leadRows, err := db.Query("SELECT IFNULL(name, ''), email, created_at FROM leads WHERE video_id = ? ORDER BY created_at DESC", id)
+		if err != nil {
+			log.Printf("Lead query error for %s: %v", id, err)
+			http.Error(w, "unable to load video leads", http.StatusInternalServerError)
+			return
+		}
+		defer leadRows.Close()
+
+		var leads []LeadData
+		for leadRows.Next() {
+			var lead LeadData
+			if err := leadRows.Scan(&lead.Name, &lead.Email, &lead.CreatedAt); err != nil {
+				log.Printf("Lead scan error for %s: %v", id, err)
+				continue
+			}
+			leads = append(leads, lead)
+		}
+
+		if isExport {
+			filename := fmt.Sprintf("vidify-leads-%s.csv", id)
+			w.Header().Set("Content-Type", "text/csv")
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+
+			csvWriter := csv.NewWriter(w)
+			defer csvWriter.Flush()
+
+			if err := csvWriter.Write([]string{"Name", "Email", "Captured At"}); err != nil {
+				log.Printf("CSV header write error for %s: %v", id, err)
+				http.Error(w, "Unable to export leads", http.StatusInternalServerError)
+				return
+			}
+
+			for _, lead := range leads {
+				if err := csvWriter.Write([]string{
+					lead.Name,
+					lead.Email,
+					lead.CreatedAt.Format("2006-01-02 15:04:05"),
+				}); err != nil {
+					log.Printf("CSV row write error for %s: %v", id, err)
+					http.Error(w, "Unable to export leads", http.StatusInternalServerError)
+					return
+				}
+			}
+
+			return
+		}
 		tmpl, err := template.ParseFiles("web/templates/stats.html")
 		if err != nil {
 			log.Printf("Stats template error: %v", err)
@@ -1200,6 +1314,8 @@ func main() {
 			ShareCount:    shareCount,
 			DownloadCount: downloadCount,
 			CTR:           ctr,
+			LeadCount:     len(leads),
+			Leads:         leads,
 		}
 
 		if err := tmpl.Execute(w, data); err != nil {
