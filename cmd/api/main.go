@@ -99,14 +99,22 @@ type LeadData struct {
 	CreatedAt time.Time
 }
 
+type RetentionPoint struct {
+	Second int `json:"second"`
+	Views  int `json:"views"`
+}
+
 type StatsPageData struct {
-	Video         VideoData
-	UserEmail     string
-	ShareCount    int
-	DownloadCount int
-	CTR           float64
-	LeadCount     int
-	Leads         []LeadData
+	Video            VideoData
+	UserEmail        string
+	ShareCount       int
+	DownloadCount    int
+	CTR              float64
+	LeadCount        int
+	Leads            []LeadData
+	RetentionJSON    template.JS
+	RetentionPeak    int
+	RetentionMaxTime int
 }
 
 type webhookPayload struct {
@@ -117,6 +125,11 @@ type webhookPayload struct {
 	Name       string `json:"name"`
 	Email      string `json:"email"`
 	CapturedAt string `json:"captured_at"`
+}
+
+type retentionPayload struct {
+	VideoID string `json:"video_id"`
+	Second  int    `json:"second"`
 }
 
 func parsePlayerOptions(r *http.Request) PlayerOptions {
@@ -1447,6 +1460,44 @@ func main() {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	http.HandleFunc("/track", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var payload retentionPayload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, "invalid payload", http.StatusBadRequest)
+			return
+		}
+
+		payload.VideoID = strings.TrimSpace(payload.VideoID)
+		if payload.VideoID == "" {
+			http.Error(w, "missing video_id", http.StatusBadRequest)
+			return
+		}
+
+		if payload.Second < 0 {
+			http.Error(w, "invalid second", http.StatusBadRequest)
+			return
+		}
+
+		_, err := db.Exec(`
+			INSERT INTO video_retention (video_id, second, views)
+			VALUES (?, ?, 1)
+			ON CONFLICT(video_id, second)
+			DO UPDATE SET views = views + 1
+		`, payload.VideoID, payload.Second)
+		if err != nil {
+			log.Printf("Retention tracking error for %s at second %d: %v", payload.VideoID, payload.Second, err)
+			http.Error(w, "failed to track retention", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	http.HandleFunc("/stats/", func(w http.ResponseWriter, r *http.Request) {
 		userEmail := getLoggedInUser(r)
 		if userEmail == "" {
@@ -1550,6 +1601,38 @@ func main() {
 			leads = append(leads, lead)
 		}
 
+		retentionRows, err := db.Query("SELECT second, views FROM video_retention WHERE video_id = ? ORDER BY second ASC", id)
+		if err != nil {
+			log.Printf("Retention query error for %s: %v", id, err)
+			http.Error(w, "unable to load video retention", http.StatusInternalServerError)
+			return
+		}
+		defer retentionRows.Close()
+
+		var retentionPoints []RetentionPoint
+		retentionPeak := 0
+		retentionMaxTime := 0
+		for retentionRows.Next() {
+			var point RetentionPoint
+			if err := retentionRows.Scan(&point.Second, &point.Views); err != nil {
+				log.Printf("Retention scan error for %s: %v", id, err)
+				continue
+			}
+			retentionPoints = append(retentionPoints, point)
+			if point.Views > retentionPeak {
+				retentionPeak = point.Views
+			}
+			if point.Second > retentionMaxTime {
+				retentionMaxTime = point.Second
+			}
+		}
+
+		retentionJSONBytes, err := json.Marshal(retentionPoints)
+		if err != nil {
+			log.Printf("Retention JSON marshal error for %s: %v", id, err)
+			retentionJSONBytes = []byte("[]")
+		}
+
 		if isExport {
 			filename := fmt.Sprintf("vidify-leads-%s.csv", id)
 			w.Header().Set("Content-Type", "text/csv")
@@ -1586,13 +1669,16 @@ func main() {
 		}
 
 		data := StatsPageData{
-			Video:         v,
-			UserEmail:     userEmail,
-			ShareCount:    shareCount,
-			DownloadCount: downloadCount,
-			CTR:           ctr,
-			LeadCount:     len(leads),
-			Leads:         leads,
+			Video:            v,
+			UserEmail:        userEmail,
+			ShareCount:       shareCount,
+			DownloadCount:    downloadCount,
+			CTR:              ctr,
+			LeadCount:        len(leads),
+			Leads:            leads,
+			RetentionJSON:    template.JS(retentionJSONBytes),
+			RetentionPeak:    retentionPeak,
+			RetentionMaxTime: retentionMaxTime,
 		}
 
 		if err := tmpl.Execute(w, data); err != nil {

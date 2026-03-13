@@ -797,6 +797,23 @@
 
         const currentVideoId = '{{.Video.ID}}';
 
+        const trackedSeconds = new Set();
+
+        function trackRetention(second) {
+            if (!currentVideoId || second < 0 || trackedSeconds.has(second)) return;
+            trackedSeconds.add(second);
+
+            fetch('/track', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    video_id: currentVideoId,
+                    second: second
+                }),
+                keepalive: true
+            }).catch(() => {});
+        }
+
         function sendAnalyticsPing(endpoint, id) {
             if (!id) return;
             const payload = JSON.stringify({ videoId: id });
@@ -844,7 +861,28 @@
                 }
             };
 
-            video.addEventListener('loadedmetadata', applyStartTime, { once: true });
+            let retentionInterval = null;
+
+            const startRetentionTracking = () => {
+                if (retentionInterval) return;
+                retentionInterval = setInterval(() => {
+                    if (video.paused || video.ended) return;
+                    const currentSecond = Math.floor(video.currentTime);
+                    trackRetention(currentSecond);
+                }, 3000);
+            };
+
+            const stopRetentionTracking = () => {
+                if (retentionInterval) {
+                    clearInterval(retentionInterval);
+                    retentionInterval = null;
+                }
+            };
+
+            video.addEventListener('loadedmetadata', () => {
+                applyStartTime();
+                trackRetention(Math.floor(video.currentTime));
+            }, { once: true });
 
             const syncPlayState = () => {
                 if (video.paused || video.ended) {
@@ -907,20 +945,25 @@
             video.addEventListener('play', () => {
                 syncPlayState();
                 syncCTAState();
+                startRetentionTracking();
             });
             video.addEventListener('pause', () => {
                 syncPlayState();
                 syncCTAState();
+                stopRetentionTracking();
             });
             video.addEventListener('ended', () => {
                 syncPlayState();
                 syncCTAState();
+                stopRetentionTracking();
+                trackRetention(Math.floor(video.duration || video.currentTime || 0));
             });
             video.addEventListener('timeupdate', syncCTAState);
             video.addEventListener('seeked', syncCTAState);
 
             if (isEmailGate && !isGateUnlocked()) {
                 video.pause();
+                stopRetentionTracking();
             } else if (shouldAutoplay) {
                 video.play().catch(() => {});
             }
