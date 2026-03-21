@@ -97,6 +97,22 @@ type VideoCTA struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
+type FunnelData struct {
+	ID        string
+	UserID    string
+	Name      string
+	CreatedAt time.Time
+}
+
+type FunnelStepData struct {
+	ID        string
+	FunnelID  string
+	StepType  string
+	VideoID   string
+	Position  int
+	CreatedAt time.Time
+}
+
 type ViewPageData struct {
 	Video         VideoData
 	Creator       ProfileData
@@ -1257,6 +1273,55 @@ func main() {
 		}
 
 		http.Redirect(w, r, "/player/"+id, http.StatusSeeOther)
+	})
+
+	http.HandleFunc("/f/", func(w http.ResponseWriter, r *http.Request) {
+		funnelID := filepath.Base(r.URL.Path)
+		if funnelID == "" {
+			http.Redirect(w, r, "/gallery", http.StatusSeeOther)
+			return
+		}
+
+		var firstStep FunnelStepData
+		err := db.QueryRow(`
+			SELECT id, funnel_id, step_type, IFNULL(video_id, ''), position, created_at
+			FROM funnel_steps
+			WHERE funnel_id = ?
+			ORDER BY position ASC, created_at ASC
+			LIMIT 1
+		`, funnelID).Scan(
+			&firstStep.ID,
+			&firstStep.FunnelID,
+			&firstStep.StepType,
+			&firstStep.VideoID,
+			&firstStep.Position,
+			&firstStep.CreatedAt,
+		)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				http.NotFound(w, r)
+				return
+			}
+			log.Printf("Funnel first-step lookup error for %s: %v", funnelID, err)
+			http.Error(w, "Unable to load funnel", http.StatusInternalServerError)
+			return
+		}
+
+		switch firstStep.StepType {
+		case "video":
+			if strings.TrimSpace(firstStep.VideoID) == "" {
+				http.Error(w, "Funnel video step is missing a video", http.StatusInternalServerError)
+				return
+			}
+
+			target := fmt.Sprintf("/player/%s?funnel=%s&step=%s", firstStep.VideoID, funnelID, firstStep.ID)
+			http.Redirect(w, r, target, http.StatusSeeOther)
+			return
+		default:
+			log.Printf("Unsupported first funnel step type for %s: %s", funnelID, firstStep.StepType)
+			http.Error(w, "Unsupported funnel step type", http.StatusInternalServerError)
+			return
+		}
 	})
 
 	// Secure proxy endpoint for direct video access without exposing S3 URL

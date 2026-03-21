@@ -79,6 +79,104 @@
             box-sizing: border-box;
         }
 
+        .player-container.is-funnel-mode {
+            max-width: 980px;
+            margin: 32px auto 56px;
+            padding: 0 20px 40px;
+        }
+
+        .funnel-shell {
+            display: none;
+            width: 100%;
+            margin-bottom: 18px;
+        }
+
+        .player-container.is-funnel-mode .funnel-shell {
+            display: block;
+        }
+        .funnel-shell.is-visible {
+            display: block !important;
+        }
+        .player-container.is-funnel-mode .back-link {
+            display: none;
+        }
+
+        .funnel-hero {
+            text-align: center;
+            margin: 0 auto 24px;
+            max-width: 760px;
+            padding-top: 6px;
+        }
+
+        .funnel-eyebrow {
+            display: inline-block;
+            margin-bottom: 10px;
+            color: #7dd3fc;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .funnel-title {
+            margin: 0;
+            font-size: 34px;
+            line-height: 1.12;
+            font-weight: 800;
+            color: #ffffff;
+        }
+
+        .funnel-subtitle {
+            margin: 12px 0 0;
+            color: #9ca3af;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .funnel-divider {
+            width: 84px;
+            height: 4px;
+            border-radius: 999px;
+            margin: 18px auto 0;
+            background: linear-gradient(90deg, #38bdf8 0%, #0ea5e9 100%);
+            opacity: 0.9;
+        }
+
+        .funnel-player-wrap {
+            width: 100%;
+            max-width: 860px;
+            margin: 0 auto;
+        }
+
+        .player-container.is-funnel-mode .watch-layout {
+            display: block;
+        }
+
+        .player-container.is-funnel-mode .main-column {
+            max-width: 860px;
+            margin: 0 auto;
+        }
+
+        .player-container.is-funnel-mode .side-column,
+        .player-container.is-funnel-mode .video-info,
+        .player-container.is-funnel-mode .creator-row,
+        .player-container.is-funnel-mode .video-details-card {
+            display: none;
+        }
+
+        .player-container.is-funnel-mode .video-stage {
+            border-radius: 18px;
+        }
+
+        @media (max-width: 640px) {
+            .funnel-title {
+                font-size: 28px;
+            }
+
+            .funnel-subtitle {
+                font-size: 15px;
+            }
+        }
+
         .is-embed-container {
             max-width: 100%;
             margin: 0;
@@ -908,6 +1006,38 @@
 
     <script>
         window.currentVideoId = '{{.Video.ID}}';
+
+        (function () {
+            const params = new URLSearchParams(window.location.search);
+            const isFunnelMode = params.has('funnel');
+            if (!isFunnelMode) return;
+
+            const container = document.querySelector('.player-container');
+            if (container) {
+                container.classList.add('is-funnel-mode');
+            }
+
+            const videoStage = document.querySelector('.video-stage');
+            console.log('isFunnelMode', isFunnelMode);
+            console.log('container', container);
+            console.log('videoStage', videoStage);
+            if (!videoStage || !container) return;
+
+            const hero = document.createElement('div');
+            hero.className = 'funnel-shell is-visible';
+            hero.style.display = 'block';
+            hero.innerHTML = `
+                <div class="funnel-hero">
+                    <div class="funnel-eyebrow">Video Funnel</div>
+                    <h1 class="funnel-title">{{.Video.Title}}</h1>
+                    <p class="funnel-subtitle">Watch the training below and move through the funnel without extra landing pages or distractions.</p>
+                    <div class="funnel-divider"></div>
+                </div>
+            `;
+
+            container.insertBefore(hero, videoStage);
+            console.log('hero inserted', hero);
+        })();
     </script>
     <script src="/static/js/player.js"></script>
 </body>
