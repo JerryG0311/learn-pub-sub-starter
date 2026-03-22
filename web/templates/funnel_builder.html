@@ -1,0 +1,591 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Funnel.Name}} Builder | Vidify</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0b0b0b;
+            color: #ffffff;
+        }
+
+        .page {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            padding: 20px 24px;
+            border-bottom: 1px solid #1f1f1f;
+            background: rgba(0, 0, 0, 0.88);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .topbar-left {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .eyebrow {
+            color: #7dd3fc;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .title {
+            margin: 0;
+            font-size: 30px;
+            line-height: 1.1;
+        }
+
+        .subtitle {
+            margin: 0;
+            color: #9ca3af;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .user-pill {
+            padding: 10px 14px;
+            border: 1px solid #262626;
+            border-radius: 999px;
+            background: #111111;
+            color: #d1d5db;
+            font-size: 14px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            border: none;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .btn-primary {
+            background: #0ea5e9;
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background: #0284c7;
+        }
+
+        .btn-secondary {
+            background: #171717;
+            color: #ffffff;
+            border: 1px solid #2a2a2a;
+        }
+
+        .btn-secondary:hover {
+            background: #202020;
+        }
+
+        .builder-layout {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr) 280px;
+            gap: 20px;
+            padding: 20px 24px 28px;
+            flex: 1;
+        }
+
+        .panel {
+            background: #111111;
+            border: 1px solid #202020;
+            border-radius: 18px;
+            min-height: 200px;
+        }
+
+        .panel-header {
+            padding: 18px 18px 14px;
+            border-bottom: 1px solid #1f1f1f;
+        }
+
+        .panel-title {
+            margin: 0;
+            font-size: 18px;
+            line-height: 1.2;
+        }
+
+        .panel-subtitle {
+            margin: 8px 0 0;
+            color: #9ca3af;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .blocks-panel {
+            padding: 12px;
+        }
+
+        .block-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .block-item {
+            padding: 14px;
+            border: 1px solid #2a2a2a;
+            border-radius: 14px;
+            background: #151515;
+            display: grid;
+            gap: 6px;
+        }
+
+        .block-item-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #f3f4f6;
+        }
+
+        .block-item-desc {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #9ca3af;
+        }
+
+        .canvas-shell {
+            background:
+                radial-gradient(circle at top, rgba(14,165,233,0.06), transparent 30%),
+                linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+            border: 1px solid #202020;
+            border-radius: 22px;
+            padding: 22px;
+            min-height: 700px;
+        }
+
+        .canvas-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 22px;
+        }
+
+        .canvas-title-wrap {
+            display: grid;
+            gap: 8px;
+        }
+
+        .canvas-title {
+            margin: 0;
+            font-size: 26px;
+            line-height: 1.1;
+        }
+
+        .canvas-subtitle {
+            margin: 0;
+            color: #9ca3af;
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 720px;
+        }
+
+        .canvas-badge {
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(14, 165, 233, 0.12);
+            border: 1px solid rgba(14, 165, 233, 0.28);
+            color: #7dd3fc;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .flow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 0 8px;
+        }
+
+        .step-card {
+            width: min(100%, 560px);
+            background: #111111;
+            border: 1px solid #262626;
+            border-radius: 18px;
+            padding: 18px;
+            display: grid;
+            gap: 14px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+        }
+
+        .step-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+        }
+
+        .step-type-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(14,165,233,0.10);
+            border: 1px solid rgba(14,165,233,0.25);
+            color: #7dd3fc;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .step-position {
+            color: #9ca3af;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+        }
+
+        .step-title {
+            margin: 0;
+            font-size: 22px;
+            line-height: 1.2;
+            color: #f9fafb;
+        }
+
+        .step-meta {
+            display: grid;
+            gap: 8px;
+        }
+
+        .meta-row {
+            color: #9ca3af;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .meta-row strong {
+            color: #e5e7eb;
+        }
+
+        .step-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .step-btn {
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: #171717;
+            border: 1px solid #2a2a2a;
+            color: #f9fafb;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .step-connector {
+            width: 2px;
+            height: 28px;
+            background: linear-gradient(180deg, rgba(14,165,233,0.7), rgba(14,165,233,0.12));
+            border-radius: 999px;
+        }
+
+        .drop-zone {
+            width: min(100%, 560px);
+            min-height: 116px;
+            border: 1.5px dashed #2f2f2f;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.015);
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .drop-zone-inner {
+            display: grid;
+            gap: 8px;
+            max-width: 380px;
+        }
+
+        .drop-zone-title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: #f9fafb;
+        }
+
+        .drop-zone-desc {
+            margin: 0;
+            color: #9ca3af;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .side-info {
+            padding: 18px;
+            display: grid;
+            gap: 18px;
+        }
+
+        .info-group {
+            display: grid;
+            gap: 10px;
+        }
+
+        .info-label {
+            color: #9ca3af;
+            font-size: 12px;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .info-value {
+            color: #f3f4f6;
+            font-size: 15px;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+
+        .hint-box {
+            padding: 14px;
+            border-radius: 14px;
+            background: rgba(14,165,233,0.08);
+            border: 1px solid rgba(14,165,233,0.20);
+            color: #dbeafe;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 1100px) {
+            .builder-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .panel {
+                min-height: auto;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .topbar {
+                padding: 18px 16px;
+            }
+
+            .builder-layout {
+                padding: 16px;
+            }
+
+            .title {
+                font-size: 26px;
+            }
+
+            .canvas-title {
+                font-size: 22px;
+            }
+
+            .step-title {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="topbar">
+            <div class="topbar-left">
+                <div class="eyebrow">Video Funnel Builder</div>
+                <h1 class="title">{{.Funnel.Name}}</h1>
+                <p class="subtitle">
+                    Build the viewer journey visually. Start with the first step, then keep stacking the next action in the sequence.
+                </p>
+            </div>
+
+            <div class="topbar-right">
+                <div class="user-pill">{{.UserEmail}}</div>
+                <a class="btn btn-secondary" href="/funnels">Back to Funnels</a>
+                <a class="btn btn-primary" href="/f/{{.Funnel.ID}}" target="_blank" rel="noopener noreferrer">Open Funnel</a>
+            </div>
+        </div>
+
+        <div class="builder-layout">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Blocks</h2>
+                    <p class="panel-subtitle">
+                        These are the building blocks for your funnel. Drag-and-drop comes next — for now this gives the structure.
+                    </p>
+                </div>
+
+                <div class="blocks-panel">
+                    <div class="block-list">
+                        <div class="block-item">
+                            <div class="block-item-title">Video</div>
+                            <div class="block-item-desc">Play a specific video as a step in the funnel.</div>
+                        </div>
+
+                        <div class="block-item">
+                            <div class="block-item-title">Email Gate</div>
+                            <div class="block-item-desc">Capture a lead before allowing the viewer to continue.</div>
+                        </div>
+
+                        <div class="block-item">
+                            <div class="block-item-title">CTA</div>
+                            <div class="block-item-desc">Send the viewer to an offer, booking page, or next destination.</div>
+                        </div>
+
+                        <div class="block-item">
+                            <div class="block-item-title">End</div>
+                            <div class="block-item-desc">Finish the funnel with a final message or endpoint.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="canvas-shell">
+                <div class="canvas-header">
+                    <div class="canvas-title-wrap">
+                        <h2 class="canvas-title">Funnel Canvas</h2>
+                        <p class="canvas-subtitle">
+                            This is the whiteboard-style flow for the funnel. Each step is shown vertically so it’s easy to see how a viewer moves from one stage to the next.
+                        </p>
+                    </div>
+
+                    <div class="canvas-badge">{{len .Steps}} Step{{if ne (len .Steps) 1}}s{{end}}</div>
+                </div>
+
+                <div class="flow">
+                    {{if .Steps}}
+                        {{range .Steps}}
+                        <div class="step-card">
+                            <div class="step-card-header">
+                                <div>
+                                    <div class="step-position">Step {{.Position}}</div>
+                                    <h3 class="step-title">
+                                        {{if eq .StepType "video"}}
+                                            Video Step
+                                        {{else if eq .StepType "email_gate"}}
+                                            Email Gate
+                                        {{else if eq .StepType "cta"}}
+                                            CTA Step
+                                        {{else if eq .StepType "end"}}
+                                            End Step
+                                        {{else}}
+                                            {{.StepType}}
+                                        {{end}}
+                                    </h3>
+                                </div>
+
+                                <div class="step-type-pill">{{.StepType}}</div>
+                            </div>
+
+                            <div class="step-meta">
+                                <div class="meta-row"><strong>Step ID:</strong> {{.ID}}</div>
+                                <div class="meta-row"><strong>Funnel ID:</strong> {{.FunnelID}}</div>
+                                {{if .VideoID}}
+                                <div class="meta-row"><strong>Video ID:</strong> {{.VideoID}}</div>
+                                {{end}}
+                                <div class="meta-row"><strong>Created:</strong> {{.CreatedAt.Format "Jan 02, 2006 3:04 PM"}}</div>
+                            </div>
+
+                            <div class="step-actions">
+                                <button class="step-btn" type="button">Edit Step</button>
+                                <button class="step-btn" type="button">Duplicate</button>
+                                <button class="step-btn" type="button">Delete</button>
+                            </div>
+                        </div>
+
+                        <div class="step-connector"></div>
+                        {{end}}
+
+                        <div class="drop-zone">
+                            <div class="drop-zone-inner">
+                                <h3 class="drop-zone-title">Add the next step</h3>
+                                <p class="drop-zone-desc">
+                                    Drag the next block here later. For now, this shows where the next part of the viewer journey will be added.
+                                </p>
+                            </div>
+                        </div>
+                    {{else}}
+                        <div class="drop-zone">
+                            <div class="drop-zone-inner">
+                                <h3 class="drop-zone-title">Start your funnel</h3>
+                                <p class="drop-zone-desc">
+                                    Your funnel has no steps yet. The first step will usually be a video block, then you can continue the sequence below it.
+                                </p>
+                            </div>
+                        </div>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Funnel Details</h2>
+                    <p class="panel-subtitle">
+                        Basic information about this funnel while you build the flow.
+                    </p>
+                </div>
+
+                <div class="side-info">
+                    <div class="info-group">
+                        <div class="info-label">Funnel Name</div>
+                        <div class="info-value">{{.Funnel.Name}}</div>
+                    </div>
+
+                    <div class="info-group">
+                        <div class="info-label">Funnel ID</div>
+                        <div class="info-value">{{.Funnel.ID}}</div>
+                    </div>
+
+                    <div class="info-group">
+                        <div class="info-label">Owner</div>
+                        <div class="info-value">{{.UserEmail}}</div>
+                    </div>
+
+                    <div class="info-group">
+                        <div class="info-label">Created</div>
+                        <div class="info-value">{{.Funnel.CreatedAt.Format "Jan 02, 2006 3:04 PM"}}</div>
+                    </div>
+
+                    <div class="hint-box">
+                        MVP note: this first version gives you the builder shell and ordered step rendering. Drag-and-drop, step settings, and creation actions come next.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

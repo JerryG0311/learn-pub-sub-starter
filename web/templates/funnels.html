@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Funnels | Vidify</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0b0b0b;
+            color: #ffffff;
+        }
+
+        .page {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 20px 48px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+        }
+
+        .topbar-left h1 {
+            margin: 0 0 8px;
+            font-size: 34px;
+            line-height: 1.1;
+        }
+
+        .topbar-left p {
+            margin: 0;
+            color: #9ca3af;
+            font-size: 15px;
+            line-height: 1.6;
+            max-width: 680px;
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .user-pill {
+            padding: 10px 14px;
+            border: 1px solid #262626;
+            border-radius: 999px;
+            background: #111111;
+            color: #d1d5db;
+            font-size: 14px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            border: none;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .btn-primary {
+            background: #0ea5e9;
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background: #0284c7;
+        }
+
+        .btn-secondary {
+            background: #171717;
+            color: #ffffff;
+            border: 1px solid #2a2a2a;
+        }
+
+        .btn-secondary:hover {
+            background: #202020;
+        }
+
+        .funnel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 18px;
+        }
+
+        .funnel-card {
+            background: #111111;
+            border: 1px solid #222222;
+            border-radius: 18px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-height: 210px;
+        }
+
+        .funnel-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .funnel-badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(14, 165, 233, 0.12);
+            border: 1px solid rgba(14, 165, 233, 0.28);
+            color: #7dd3fc;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .funnel-name {
+            margin: 0;
+            font-size: 22px;
+            line-height: 1.2;
+            color: #f9fafb;
+        }
+
+        .funnel-meta {
+            display: grid;
+            gap: 8px;
+        }
+
+        .meta-row {
+            color: #9ca3af;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .meta-row strong {
+            color: #e5e7eb;
+        }
+
+        .funnel-card-footer {
+            margin-top: auto;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .empty-state {
+            margin-top: 16px;
+            padding: 48px 24px;
+            text-align: center;
+            background: #111111;
+            border: 1px dashed #2a2a2a;
+            border-radius: 18px;
+        }
+
+        .empty-state h2 {
+            margin: 0 0 10px;
+            font-size: 28px;
+            color: #f9fafb;
+        }
+
+        .empty-state p {
+            margin: 0 auto 20px;
+            max-width: 620px;
+            color: #9ca3af;
+            font-size: 15px;
+            line-height: 1.7;
+        }
+
+        @media (max-width: 640px) {
+            .topbar-left h1 {
+                font-size: 28px;
+            }
+
+            .funnel-name {
+                font-size: 20px;
+            }
+
+            .page {
+                padding: 24px 16px 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="topbar">
+            <div class="topbar-left">
+                <h1>Video Funnels</h1>
+                <p>
+                    Build direct-to-player video funnels that drop viewers straight into the experience without extra landing pages or unnecessary friction.
+                </p>
+            </div>
+
+            <div class="topbar-right">
+                <div class="user-pill">{{.UserEmail}}</div>
+                <a class="btn btn-secondary" href="/gallery">Back to Library</a>
+                <form method="POST" action="/funnels/create" style="margin:0;">
+                    <button class="btn btn-primary" type="submit">Create Funnel</button>
+                </form>
+            </div>
+        </div>
+
+        {{if .Funnels}}
+        <div class="funnel-grid">
+            {{range .Funnels}}
+            <div class="funnel-card">
+                <div class="funnel-card-header">
+                    <div>
+                        <h2 class="funnel-name">{{.Name}}</h2>
+                    </div>
+                    <div class="funnel-badge">Funnel</div>
+                </div>
+
+                <div class="funnel-meta">
+                    <div class="meta-row"><strong>ID:</strong> {{.ID}}</div>
+                    <div class="meta-row"><strong>Created:</strong> {{.CreatedAt.Format "Jan 02, 2006 3:04 PM"}}</div>
+                </div>
+
+                <div class="funnel-card-footer">
+                    <a class="btn btn-primary" href="/funnels/{{.ID}}/builder">Open Builder</a>
+                    <a class="btn btn-secondary" href="/f/{{.ID}}" target="_blank" rel="noopener noreferrer">Open Funnel</a>
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="empty-state">
+            <h2>No funnels yet</h2>
+            <p>
+                Create your first video funnel and send people straight into the player experience with one shareable link.
+            </p>
+            <form method="POST" action="/funnels/create" style="margin:0; display:inline-block;">
+                <button class="btn btn-primary" type="submit">Create Your First Funnel</button>
+            </form>
+        </div>
+        {{end}}
+    </div>
+</body>
+</html>

@@ -113,6 +113,17 @@ type FunnelStepData struct {
 	CreatedAt time.Time
 }
 
+type FunnelListPageData struct {
+	Funnels   []FunnelData
+	UserEmail string
+}
+
+type FunnelBuilderPageData struct {
+	Funnel    FunnelData
+	Steps     []FunnelStepData
+	UserEmail string
+}
+
 type ViewPageData struct {
 	Video         VideoData
 	Creator       ProfileData
@@ -1139,6 +1150,169 @@ func main() {
 		err = tmpl.Execute(w, data)
 		if err != nil {
 			log.Printf("Template execution error: %v", err)
+		}
+	})
+
+	http.HandleFunc("/funnels/create", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userEmail := getLoggedInUser(r)
+		if userEmail == "" {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		funnelID := fmt.Sprintf("funnel-%d", time.Now().UnixNano())
+		funnelName := fmt.Sprintf("New Funnel %s", time.Now().Format("Jan 2, 2006 3:04 PM"))
+
+		_, err := db.Exec(`
+			INSERT INTO funnels (id, user_id, name)
+			VALUES (?, ?, ?)
+		`, funnelID, userEmail, funnelName)
+		if err != nil {
+			log.Printf("Create funnel error for %s: %v", userEmail, err)
+			http.Error(w, "Unable to create funnel", http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/funnels/"+funnelID+"/builder", http.StatusSeeOther)
+	})
+
+	http.HandleFunc("/funnels", func(w http.ResponseWriter, r *http.Request) {
+		userEmail := getLoggedInUser(r)
+		if userEmail == "" {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		rows, err := db.Query(`
+			SELECT id, user_id, name, created_at
+			FROM funnels
+			WHERE user_id = ?
+			ORDER BY created_at DESC
+		`, userEmail)
+		if err != nil {
+			log.Printf("Funnels query error for %s: %v", userEmail, err)
+			http.Error(w, "Unable to load funnels", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var funnels []FunnelData
+		for rows.Next() {
+			var funnel FunnelData
+			if err := rows.Scan(&funnel.ID, &funnel.UserID, &funnel.Name, &funnel.CreatedAt); err != nil {
+				log.Printf("Funnel scan error for %s: %v", userEmail, err)
+				continue
+			}
+			funnels = append(funnels, funnel)
+		}
+
+		tmpl, err := template.ParseFiles("web/templates/funnels.html")
+		if err != nil {
+			log.Printf("Funnels template error: %v", err)
+			http.Error(w, "Funnels template not found", http.StatusInternalServerError)
+			return
+		}
+
+		data := FunnelListPageData{
+			Funnels:   funnels,
+			UserEmail: userEmail,
+		}
+
+		if err := tmpl.Execute(w, data); err != nil {
+			log.Printf("Funnels template execution error: %v", err)
+		}
+	})
+
+	http.HandleFunc("/funnels/", func(w http.ResponseWriter, r *http.Request) {
+		userEmail := getLoggedInUser(r)
+		if userEmail == "" {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		path := strings.TrimPrefix(r.URL.Path, "/funnels/")
+		path = strings.Trim(path, "/")
+		if path == "" {
+			http.Redirect(w, r, "/funnels", http.StatusSeeOther)
+			return
+		}
+
+		parts := strings.Split(path, "/")
+		if len(parts) != 2 || parts[1] != "builder" {
+			http.NotFound(w, r)
+			return
+		}
+
+		funnelID := strings.TrimSpace(parts[0])
+		if funnelID == "" {
+			http.Redirect(w, r, "/funnels", http.StatusSeeOther)
+			return
+		}
+
+		var funnel FunnelData
+		err := db.QueryRow(`
+			SELECT id, user_id, name, created_at
+			FROM funnels
+			WHERE id = ? AND user_id = ?
+		`, funnelID, userEmail).Scan(
+			&funnel.ID,
+			&funnel.UserID,
+			&funnel.Name,
+			&funnel.CreatedAt,
+		)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				http.NotFound(w, r)
+				return
+			}
+			log.Printf("Funnel builder lookup error for %s: %v", funnelID, err)
+			http.Error(w, "Unable to load funnel", http.StatusInternalServerError)
+			return
+		}
+
+		rows, err := db.Query(`
+			SELECT id, funnel_id, step_type, IFNULL(video_id, ''), position, created_at
+			FROM funnel_steps
+			WHERE funnel_id = ?
+			ORDER BY position ASC, created_at ASC
+		`, funnelID)
+		if err != nil {
+			log.Printf("Funnel steps query error for %s: %v", funnelID, err)
+			http.Error(w, "Unable to load funnel steps", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var steps []FunnelStepData
+		for rows.Next() {
+			var step FunnelStepData
+			if err := rows.Scan(&step.ID, &step.FunnelID, &step.StepType, &step.VideoID, &step.Position, &step.CreatedAt); err != nil {
+				log.Printf("Funnel step scan error for %s: %v", funnelID, err)
+				continue
+			}
+			steps = append(steps, step)
+		}
+
+		tmpl, err := template.ParseFiles("web/templates/funnel_builder.html")
+		if err != nil {
+			log.Printf("Funnel builder template error: %v", err)
+			http.Error(w, "Funnel builder template not found", http.StatusInternalServerError)
+			return
+		}
+
+		data := FunnelBuilderPageData{
+			Funnel:    funnel,
+			Steps:     steps,
+			UserEmail: userEmail,
+		}
+
+		if err := tmpl.Execute(w, data); err != nil {
+			log.Printf("Funnel builder template execution error: %v", err)
 		}
 	})
 
