@@ -564,11 +564,8 @@
                                 <p class="drop-zone-desc">
                                     Drag the next block here later. For now, this shows where the next part of the viewer journey will be added.
                                 </p>
-
-                                <form method="POST" action="/funnels/add-video-step" style="margin-top: 10px;">
-                                    <input type="hidden" name="funnel_id" value="{{.Funnel.ID}}">
-                                    <button class="btn btn-primary" type="submit">Add Video Step</button>
-                                </form>
+                                
+                               <a class="btn btn-primary" href="/funnels/{{.Funnel.ID}}/builder?add=video" style="margin-top: 10px;">Add Video Step</a>
                             </div>
                         </div>
                     {{else}}
@@ -579,10 +576,7 @@
                                     Your funnel has no steps yet. The first step will usually be a video block, then you can continue the sequence below it.
                                 </p>
 
-                                <form method="POST" action="/funnels/add-video-step" style="margin-top: 10px;">
-                                    <input type="hidden" name="funnel_id" value="{{.Funnel.ID}}">
-                                    <button class="btn btn-primary" type="submit">Add First Video Step</button>
-                                </form>
+                               <a class="btn btn-primary" href="/funnels/{{.Funnel.ID}}/builder?add=video" style="margin-top: 10px;">Add First Video Step</a>
                             </div>
                         </div>
                     {{end}}
@@ -627,6 +621,33 @@
                     </form>
 
                     <a class="btn btn-secondary" href="/funnels/{{.Funnel.ID}}/builder">Done Editing</a>
+                </div>
+                {{else if eq .AddMode "video"}}
+                <div class="panel-header">
+                    <h2 class="panel-title">Add Video Step</h2>
+                    <p class="panel-subtitle">
+                        Choose which video should be inserted as the next step in this funnel.
+                    </p>
+                </div>
+
+                <div class="side-info">
+                    <form method="POST" action="/funnels/add-video-step" style="display:grid; gap:16px;">
+                        <input type="hidden" name="funnel_id" value="{{.Funnel.ID}}">
+
+                        <div class="info-group">
+                            <label class="info-label" for="video_id">Select Video</label>
+                            <select id="video_id" name="video_id" style="width:100%; padding:12px 14px; border-radius:12px; border:1px solid #2a2a2a; background:#151515; color:#f9fafb; font-size:14px;">
+                                <option value="">Choose a video...</option>
+                                {{range .Videos}}
+                                <option value="{{.ID}}">{{.Title}} ({{.ID}})</option>
+                                {{end}}
+                            </select>
+                        </div>
+
+                        <button class="btn btn-primary" type="submit">Insert Video Step</button>
+                    </form>
+
+                    <a class="btn btn-secondary" href="/funnels/{{.Funnel.ID}}/builder">Cancel</a>
                 </div>
                 {{else}}
                 <div class="panel-header">

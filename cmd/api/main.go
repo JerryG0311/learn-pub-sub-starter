@@ -124,6 +124,8 @@ type FunnelBuilderPageData struct {
 	Funnel       FunnelData
 	Steps        []FunnelStepData
 	SelectedStep *FunnelStepData
+	Videos       []VideoData
+	AddMode      string
 	UserEmail    string
 }
 
@@ -1244,8 +1246,13 @@ func main() {
 		}
 
 		funnelID := strings.TrimSpace(r.FormValue("funnel_id"))
+		videoID := strings.TrimSpace(r.FormValue("video_id"))
 		if funnelID == "" {
 			http.Error(w, "missing funnel id", http.StatusBadRequest)
+			return
+		}
+		if videoID == "" {
+			http.Error(w, "missing video id", http.StatusBadRequest)
 			return
 		}
 
@@ -1283,9 +1290,6 @@ func main() {
 		}
 
 		stepID := fmt.Sprintf("step-%d", time.Now().UnixNano())
-
-		// Temporary hardcoded video
-		videoID := "vid-1773432484"
 
 		_, err = db.Exec(`
 			INSERT INTO funnel_steps (id, funnel_id, step_type, video_id, position, headline, subheadline)
@@ -1392,6 +1396,7 @@ func main() {
 		}
 
 		selectedStepID := strings.TrimSpace(r.URL.Query().Get("step"))
+		addMode := strings.TrimSpace(r.URL.Query().Get("add"))
 
 		var funnel FunnelData
 		err := db.QueryRow(`
@@ -1465,6 +1470,64 @@ func main() {
 			}
 		}
 
+		videoRows, err := db.Query(`
+			SELECT id, user_id, title, description, playlist, source_path, thumbnail_url, views, created_at, status, 
+				IFNULL(cta_text, ''), IFNULL(cta_hero_text, ''), IFNULL(cta_url, ''), IFNULL(cta_time_seconds, 0),
+				IFNULL(cta_type, 'button'), IFNULL(cta_clicks, 0), IFNULL(share_count, 0), IFNULL(download_count, 0),
+				IFNULL(player_autoplay, 0), IFNULL(player_muted, 0), IFNULL(player_controls, 1), IFNULL(player_start_seconds, 0)
+			FROM Videos
+			WHERE user_id = ?
+			ORDER BY created_at DESC
+		`, userEmail)
+		if err != nil {
+			log.Printf("Builder videos query error for %s: %v", userEmail, err)
+			http.Error(w, "Unable to load videos", http.StatusInternalServerError)
+			return
+		}
+		defer videoRows.Close()
+
+		var videos []VideoData
+		for videoRows.Next() {
+			var video VideoData
+			var playlist, thumb sql.NullString
+
+			if err := videoRows.Scan(
+				&video.ID,
+				&video.UserID,
+				&video.Title,
+				&video.Description,
+				&playlist,
+				&video.SourcePath,
+				&thumb,
+				&video.Views,
+				&video.CreatedAt,
+				&video.Status,
+				&video.CTAText,
+				&video.CTAHeroText,
+				&video.CTAURL,
+				&video.CTATimeSeconds,
+				&video.CTAType,
+				&video.CTAClicks,
+				&video.ShareCount,
+				&video.DownloadCount,
+				&video.PlayerAutoplay,
+				&video.PlayerMuted,
+				&video.PlayerControls,
+				&video.PlayerStartSeconds,
+			); err != nil {
+				log.Printf("Builder video scan error for %s: %v", userEmail, err)
+				continue
+			}
+			if playlist.Valid {
+				video.Playlist = playlist.String
+			}
+			if thumb.Valid {
+				video.ThumbnailURL = thumb.String
+			}
+
+			videos = append(videos, video)
+		}
+
 		tmpl, err := template.ParseFiles("web/templates/funnel_builder.html")
 		if err != nil {
 			log.Printf("Funnel builder template error: %v", err)
@@ -1476,6 +1539,8 @@ func main() {
 			Funnel:       funnel,
 			Steps:        steps,
 			SelectedStep: selectedStep,
+			Videos:       videos,
+			AddMode:      addMode,
 			UserEmail:    userEmail,
 		}
 
