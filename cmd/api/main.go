@@ -105,12 +105,14 @@ type FunnelData struct {
 }
 
 type FunnelStepData struct {
-	ID        string
-	FunnelID  string
-	StepType  string
-	VideoID   string
-	Position  int
-	CreatedAt time.Time
+	ID          string
+	FunnelID    string
+	StepType    string
+	VideoID     string
+	Position    int
+	Headline    string
+	Subheadline string
+	CreatedAt   time.Time
 }
 
 type FunnelListPageData struct {
@@ -1285,9 +1287,17 @@ func main() {
 		videoID := "vid-1773432484"
 
 		_, err = db.Exec(`
-			INSERT INTO funnel_steps (id, funnel_id, step_type, video_id, position)
-			VALUES (?, ?, ?, ?, ?)
-		`, stepID, funnelID, "video", videoID, nextPosition)
+			INSERT INTO funnel_steps (id, funnel_id, step_type, video_id, position, headline, subheadline)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`,
+			stepID,
+			funnelID,
+			"video",
+			videoID,
+			nextPosition,
+			"Watch this training",
+			"This will walk you through the next step",
+		)
 		if err != nil {
 			log.Printf("Add video step insert error for %s: %v", funnelID, err)
 			http.Error(w, "unable to create video step", http.StatusInternalServerError)
@@ -1344,7 +1354,15 @@ func main() {
 		}
 
 		rows, err := db.Query(`
-			SELECT id, funnel_id, step_type, IFNULL(video_id, ''), position, created_at
+			SELECT 
+			id, 
+			funnel_id, 
+			step_type, 
+			IFNULL(video_id, ''), 
+			position, 
+			IFNULL(headline, ''),
+			IFNULL(subheadline, ''),
+			created_at
 			FROM funnel_steps
 			WHERE funnel_id = ?
 			ORDER BY position ASC, created_at ASC
@@ -1359,7 +1377,16 @@ func main() {
 		var steps []FunnelStepData
 		for rows.Next() {
 			var step FunnelStepData
-			if err := rows.Scan(&step.ID, &step.FunnelID, &step.StepType, &step.VideoID, &step.Position, &step.CreatedAt); err != nil {
+			if err := rows.Scan(
+				&step.ID,
+				&step.FunnelID,
+				&step.StepType,
+				&step.VideoID,
+				&step.Position,
+				&step.Headline,
+				&step.Subheadline,
+				&step.CreatedAt,
+			); err != nil {
 				log.Printf("Funnel step scan error for %s: %v", funnelID, err)
 				continue
 			}
